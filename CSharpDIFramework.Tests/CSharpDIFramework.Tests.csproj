@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="TUnit" Version="0.25.21"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CSharpDIFramework.Core\CSharpDIFramework.Core.csproj"/>
+        <ProjectReference Include="..\CSharpDIFramework.SourceGenerators\CSharpDIFramework.SourceGenerators.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+
+</Project>
