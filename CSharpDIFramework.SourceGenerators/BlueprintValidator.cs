@@ -28,7 +28,7 @@ internal static class BlueprintValidator
                 }
             }
 
-            DetectCycles(blueprint.Registrations, diagnostics);
+            DetectCycles(blueprint, diagnostics);
         }
 
         return new ValidationResult(blueprints, diagnostics.ToImmutableArray());
@@ -87,27 +87,28 @@ internal static class BlueprintValidator
         }
     }
 
-    private static void DetectCycles(ImmutableArray<ServiceRegistration> registrations, List<Diagnostic> diagnostics)
+    private static void DetectCycles(ContainerBlueprint blueprint, List<Diagnostic> diagnostics)
     {
+        Dictionary<ITypeSymbol, ServiceRegistration> registrationMap = blueprint.Registrations.ToDictionary<ITypeSymbol, ServiceRegistration>(
+            r => r.ServiceType,
+            SymbolEqualityComparer.Default
+        );
+
         var visiting = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         var visited = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
 
-        foreach (ServiceRegistration? reg in registrations)
+        foreach (ServiceRegistration reg in blueprint.Registrations)
         {
-            if (reg is null)
-            {
-                continue;
-            }
-
             if (!visited.Contains(reg.ServiceType))
             {
-                DetectCyclesRecursive(reg, new Stack<ITypeSymbol>(), visiting, visited, diagnostics);
+                DetectCyclesRecursive(reg, registrationMap, new Stack<ITypeSymbol>(), visiting, visited, diagnostics);
             }
         }
     }
 
     private static void DetectCyclesRecursive(
         ServiceRegistration currentReg,
+        IReadOnlyDictionary<ITypeSymbol, ServiceRegistration> allRegistrations,
         Stack<ITypeSymbol> path,
         HashSet<ITypeSymbol> visiting,
         HashSet<ITypeSymbol> visited,
@@ -118,13 +119,20 @@ internal static class BlueprintValidator
 
         if (currentReg is ConstructorRegistration ctorReg)
         {
-            foreach (ServiceRegistration? dependency in ctorReg.Dependencies)
+            foreach (ServiceRegistration dependencyStub in ctorReg.Dependencies)
             {
-                if (visiting.Contains(dependency.ServiceType))
+                // We must look up the full dependency from the map to continue traversal
+                if (!allRegistrations.TryGetValue(dependencyStub.ServiceType, out ServiceRegistration? fullDependency))
+                {
+                    // This case should have been caught by the parser as a "ServiceNotRegistered" error,
+                    // but we handle it defensively here.
+                    continue;
+                }
+
+                if (visiting.Contains(fullDependency.ServiceType))
                 {
                     // Cycle detected!
-                    string cyclePath =
-                        string.Join(" -> ", path.Reverse().Select(s => s.Name).Concat([dependency.ServiceType.Name]));
+                    string cyclePath = string.Join(" -> ", path.Reverse().Select(s => s.Name).Concat([fullDependency.ServiceType.Name]));
                     diagnostics.Add(
                         Diagnostic.Create(
                             Diagnostics.CyclicDependency,
@@ -133,12 +141,12 @@ internal static class BlueprintValidator
                             cyclePath
                         )
                     );
-                    continue;
+                    continue; // Continue checking other branches
                 }
 
-                if (!visited.Contains(dependency.ServiceType))
+                if (!visited.Contains(fullDependency.ServiceType))
                 {
-                    DetectCyclesRecursive(dependency, path, visiting, visited, diagnostics);
+                    DetectCyclesRecursive(fullDependency, allRegistrations, path, visiting, visited, diagnostics);
                 }
             }
         }

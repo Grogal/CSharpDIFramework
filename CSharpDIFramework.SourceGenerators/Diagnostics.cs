@@ -32,21 +32,21 @@ internal static class Diagnostics
     );
 
     public static readonly DiagnosticDescriptor CyclicDependency = new(
-        id: "NDI0004",
-        title: "Cyclic dependency detected",
-        messageFormat: "A cyclic dependency was detected for service '{0}'. Cycle path: {1}.",
-        category: "CSharpDIFramework.Usage",
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true
+        "NDI0004",
+        "Cyclic dependency detected",
+        "A cyclic dependency was detected for service '{0}'. Cycle path: {1}.",
+        "CSharpDIFramework.Usage",
+        DiagnosticSeverity.Error,
+        true
     );
 
     public static readonly DiagnosticDescriptor ServiceNotRegistered = new(
-        id: "NDI0005",
-        title: "Service not registered",
-        messageFormat: "The service '{0}' is required by '{1}' but is not registered in the container",
-        category: "CSharpDIFramework.Usage",
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true
+        "NDI0005",
+        "Service not registered",
+        "The service '{0}' is required by '{1}' but is not registered in the container",
+        "CSharpDIFramework.Usage",
+        DiagnosticSeverity.Error,
+        true
     );
 
     public static readonly DiagnosticDescriptor ImplementationNotAssignable = new(
@@ -68,21 +68,29 @@ internal static class Diagnostics
     );
 
     public static readonly DiagnosticDescriptor AmbiguousConstructors = new(
-        id: "NDI0008",
-        title: "Ambiguous constructors",
-        messageFormat:
+        "NDI0008",
+        "Ambiguous constructors",
         "The implementation type '{0}' has multiple public constructors with {1} parameters. Please use the [Inject] attribute to specify which constructor to use.",
-        category: "CSharpDIFramework.Usage",
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true
+        "CSharpDIFramework.Usage",
+        DiagnosticSeverity.Error,
+        true
     );
 
     public static readonly DiagnosticDescriptor MultipleInjectConstructors = new(
-        id: "NDI0009",
-        title: "Multiple [Inject] constructors",
-        messageFormat: "The implementation type '{0}' has multiple constructors marked with the [Inject] attribute. Only one is permitted.",
-        category: "CSharpDIFramework.Usage",
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true
+        "NDI0009",
+        "Multiple [Inject] constructors",
+        "The implementation type '{0}' has multiple constructors marked with the [Inject] attribute. Only one is permitted.",
+        "CSharpDIFramework.Usage",
+        DiagnosticSeverity.Error,
+        true
+    );
+
+    public static readonly DiagnosticDescriptor DuplicateRegistrationConstructors = new(
+        "NDI0010",
+        "Duplicate services registration",
+        "The service type '{0}' is registered multiple times with the same implementation and constructor signature. Duplicate registrations are not allowed.",
+        "CSharpDIFramework.Usage",
+        DiagnosticSeverity.Error,
+        true
     );
 }

@@ -90,8 +90,8 @@ public sealed record ConstructorRegistration : ServiceRegistration
     public INamedTypeSymbol ImplementationType { get; }
 
     /// <summary>The constructor that was selected to create this service.</summary>
-    public IMethodSymbol SelectedConstructor { get; }
+    public IMethodSymbol SelectedConstructor { get; set; }
 
     /// <summary>A list of the services this constructor depends on.</summary>
-    public ImmutableArray<ServiceRegistration> Dependencies { get; }
+    public ImmutableArray<ServiceRegistration> Dependencies { get; set; }
 }

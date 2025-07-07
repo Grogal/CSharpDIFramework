@@ -148,7 +148,6 @@ internal static class CodeGenerator
             foreach (ServiceRegistration? dependency in ctorReg.Dependencies)
             {
                 string dependencyType = dependency.ServiceType.ToDisplayString(s_fullyQualifiedFormat);
-                // The crucial change: generate Resolve<T>() calls for each dependency.
                 constructorArgs.Add($"Resolve<{dependencyType}>()");
             }
 

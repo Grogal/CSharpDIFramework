@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -31,74 +32,121 @@ internal static class BlueprintParser
         string? namespaceName = classSymbol.ContainingNamespace.IsGlobalNamespace
             ? null
             : classSymbol.ContainingNamespace.ToDisplayString();
+        Location declarationLocation = classNode.Identifier.GetLocation();
 
-        var registrations = new List<ServiceRegistration>();
-        foreach (AttributeData? attributeData in classSymbol.GetAttributes())
+        var preliminaryRegistrations = new Dictionary<ITypeSymbol, ServiceRegistration>(SymbolEqualityComparer.Default);
+        foreach (AttributeData attributeData in classSymbol.GetAttributes())
         {
-            ServiceRegistration? registration = ParseRegistration(containerName, attributeData, diagnostics);
-            if (registration != null)
+            (ITypeSymbol? serviceType, ServiceRegistration? registration) =
+                ParsePreliminaryRegistration(attributeData, diagnostics);
+
+            if (serviceType != null && registration != null)
             {
-                registrations.Add(registration);
+                // Check for duplicate service registrations
+                if (preliminaryRegistrations.ContainsKey(serviceType))
+                {
+                    diagnostics.Add(
+                        Diagnostic.Create(
+                            Diagnostics.DuplicateRegistrationConstructors,
+                            declarationLocation,
+                            serviceType.ToDisplayString()
+                        )
+                    );
+                }
+                else
+                {
+                    preliminaryRegistrations.Add(serviceType, registration);
+                }
             }
         }
 
-        Location declarationLocation = classNode.Identifier.GetLocation();
-
-        var containingTypeDeclarations = new List<string>();
-        SyntaxNode? parent = classNode.Parent;
-        while (parent is ClassDeclarationSyntax parentClass)
+        var finalRegistrations = new List<ServiceRegistration>();
+        foreach (ServiceRegistration preliminaryReg in preliminaryRegistrations.Values)
         {
-            var parentDeclaration = $"public partial class {parentClass.Identifier.Text}";
-            containingTypeDeclarations.Insert(0, parentDeclaration);
-            parent = parent.Parent;
+            if (preliminaryReg is ConstructorRegistration ctorReg)
+            {
+                (IMethodSymbol? selectedCtor, ImmutableArray<Diagnostic> ctorDiagnostics) =
+                    SelectConstructor(ctorReg.ImplementationType);
+                diagnostics.AddRange(ctorDiagnostics);
+
+                if (selectedCtor is null)
+                {
+                    // Error was reported in SelectConstructor, so we create a dummy registration to prevent crashes.
+                    finalRegistrations.Add(ctorReg with { Dependencies = ImmutableArray<ServiceRegistration>.Empty });
+                    continue;
+                }
+
+                var dependencies = new List<ServiceRegistration>();
+                var allDependenciesFound = true;
+                foreach (IParameterSymbol parameter in selectedCtor.Parameters)
+                {
+                    if (preliminaryRegistrations.TryGetValue(parameter.Type, out ServiceRegistration? dependencyReg))
+                    {
+                        dependencies.Add(dependencyReg);
+                    }
+                    else
+                    {
+                        // Dependency not found!
+                        diagnostics.Add(
+                            Diagnostic.Create(
+                                Diagnostics.ServiceNotRegistered,
+                                parameter.Locations.FirstOrDefault() ?? ctorReg.RegistrationLocation,
+                                parameter.Type.ToDisplayString(),
+                                ctorReg.ImplementationType.ToDisplayString()
+                            )
+                        );
+                        allDependenciesFound = false;
+                    }
+                }
+
+                if (allDependenciesFound)
+                {
+                    finalRegistrations.Add(
+                        ctorReg with
+                        {
+                            SelectedConstructor = selectedCtor,
+                            Dependencies = dependencies.ToImmutableArray()
+                        }
+                    );
+                }
+            }
         }
+
+        ImmutableArray<string> containingTypeDeclarations = GetContainingTypeDeclarations(classNode);
 
         var blueprint = new ContainerBlueprint(
             classSymbol,
             containerName,
             namespaceName,
-            registrations.ToImmutableArray(),
+            finalRegistrations.ToImmutableArray(),
             declarationLocation,
-            containingTypeDeclarations.ToImmutableArray()
+            containingTypeDeclarations
         );
 
         return (blueprint, diagnostics.ToImmutableArray());
     }
 
-    private static ServiceRegistration? ParseRegistration(string containerName, in AttributeData attributeData, List<Diagnostic> diagnostics)
+    private static (ITypeSymbol? ServiceType, ServiceRegistration? Registration) ParsePreliminaryRegistration(
+        AttributeData attributeData,
+        List<Diagnostic> diagnostics)
     {
-        if (attributeData.AttributeClass?.ToDisplayString() != Constants.SingletonAttributeName)
+        string? attributeName = attributeData.AttributeClass?.ToDisplayString();
+        ServiceLifetime lifetime;
+
+        switch (attributeName)
         {
-            return null;
+            case Constants.SingletonAttributeName:
+                lifetime = ServiceLifetime.Singleton;
+                break;
+            // Add Transient/Scoped cases here in the future
+            default:
+                return (null, null);
         }
 
-        ITypeSymbol? serviceType;
-        INamedTypeSymbol? implementationType;
+        (ITypeSymbol? serviceType, INamedTypeSymbol? implementationType) =
+            ExtractServiceAndImplTypes(attributeData, diagnostics);
+        
         Location registrationLocation = attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation();
-
-        if (attributeData.ConstructorArguments.Length == 2)
-        {
-            // [Singleton(typeof(IService), typeof(ServiceImpl))]
-            serviceType = attributeData.ConstructorArguments[0].Value as ITypeSymbol;
-            implementationType = attributeData.ConstructorArguments[1].Value as INamedTypeSymbol;
-        }
-        else if (attributeData.ConstructorArguments.Length == 1)
-        {
-            // [Singleton(typeof(ConcreteService))]
-            serviceType = attributeData.ConstructorArguments[0].Value as ITypeSymbol;
-            implementationType = serviceType as INamedTypeSymbol;
-        }
-        else
-        {
-            diagnostics.Add(
-                Diagnostic.Create(
-                    Diagnostics.IncorrectAttribute,
-                    registrationLocation,
-                    attributeData.AttributeClass?.ToDisplayString()
-                )
-            );
-            return null;
-        }
 
         if (serviceType is null || implementationType is null)
         {
@@ -109,51 +157,121 @@ internal static class BlueprintParser
                     attributeData.AttributeClass?.ToDisplayString()
                 )
             );
-            return null;
+            return (null, null);
         }
 
-        if (implementationType.IsAbstract)
-        {
-            diagnostics.Add(
-                Diagnostic.Create(
-                    Diagnostics.ImplementationIsAbstract,
-                    registrationLocation,
-                    implementationType.ToDisplayString()
-                )
-            );
-            return null;
-        }
-
-        IMethodSymbol? constructor = null;
-        foreach (IMethodSymbol? ctor in implementationType.Constructors)
-        {
-            if (ctor.Parameters.IsEmpty && ctor.DeclaredAccessibility == Accessibility.Public)
-            {
-                constructor = ctor;
-                break;
-            }
-        }
-
-        if (constructor is null)
-        {
-            diagnostics.Add(
-                Diagnostic.Create(
-                    Diagnostics.NoPublicConstructor,
-                    registrationLocation,
-                    containerName
-                )
-            );
-            return null;
-        }
-
-        return new ConstructorRegistration
-        (
+        var registration = new ConstructorRegistration(
             serviceType,
-            ServiceLifetime.Singleton,
+            lifetime,
             registrationLocation,
             implementationType,
-            constructor,
+            null!, // Will be replaced in Pass 2
             ImmutableArray<ServiceRegistration>.Empty
         );
+
+        return (serviceType, registration);
+    }
+
+    private static (ITypeSymbol? serviceType, INamedTypeSymbol? implementationType) ExtractServiceAndImplTypes(
+        AttributeData attributeData,
+        List<Diagnostic> diagnostics)
+    {
+        ITypeSymbol? serviceType;
+        INamedTypeSymbol? implementationType;
+        Location location = attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation();
+
+        if (attributeData.ConstructorArguments.Length == 2 &&
+            attributeData.ConstructorArguments[0].Value is ITypeSymbol st &&
+            attributeData.ConstructorArguments[1].Value is INamedTypeSymbol it)
+        {
+            serviceType = st;
+            implementationType = it;
+        }
+        else if (attributeData.ConstructorArguments.Length == 1 &&
+                 attributeData.ConstructorArguments[0].Value is INamedTypeSymbol ct)
+        {
+            serviceType = ct;
+            implementationType = ct;
+        }
+        else
+        {
+            diagnostics.Add(Diagnostic.Create(Diagnostics.IncorrectAttribute, location, attributeData.AttributeClass?.Name));
+            return (null, null);
+        }
+
+        return (serviceType, implementationType);
+    }
+
+    private static (IMethodSymbol? constructor, ImmutableArray<Diagnostic> diagnostics) SelectConstructor(INamedTypeSymbol implementationType)
+    {
+        var diagnostics = new List<Diagnostic>();
+        Location location = implementationType.Locations.FirstOrDefault() ?? Location.None;
+
+        ImmutableArray<IMethodSymbol> publicConstructors =
+            implementationType.Constructors
+                              .Where(c => c.DeclaredAccessibility == Accessibility.Public)
+                              .ToImmutableArray();
+
+        if (publicConstructors.IsEmpty)
+        {
+            diagnostics.Add(Diagnostic.Create(Diagnostics.NoPublicConstructor, location, implementationType.ToDisplayString()));
+            return (null, diagnostics.ToImmutableArray());
+        }
+
+        ImmutableArray<IMethodSymbol> injectConstructors =
+            publicConstructors
+                .Where(c => c.GetAttributes()
+                             .Any(a => a.AttributeClass?.ToDisplayString() == Constants.InjectAttributeName)
+                )
+                .ToImmutableArray();
+
+        if (injectConstructors.Length > 1)
+        {
+            diagnostics.Add(
+                Diagnostic.Create(
+                    Diagnostics.MultipleInjectConstructors, location, implementationType.ToDisplayString()
+                )
+            );
+            return (null, diagnostics.ToImmutableArray());
+        }
+
+        if (injectConstructors.Length == 1)
+        {
+            return (injectConstructors[0], diagnostics.ToImmutableArray());
+        }
+
+        // No [Inject], so fallback to greediest
+        if (publicConstructors.Length == 1)
+        {
+            return (publicConstructors[0], diagnostics.ToImmutableArray());
+        }
+
+        int maxParams = publicConstructors.Max(c => c.Parameters.Length);
+        ImmutableArray<IMethodSymbol> greediestConstructors = publicConstructors.Where(c => c.Parameters.Length == maxParams).ToImmutableArray();
+
+        if (greediestConstructors.Length > 1)
+        {
+            diagnostics.Add(
+                Diagnostic.Create(
+                    Diagnostics.AmbiguousConstructors, location, implementationType.ToDisplayString(), maxParams
+                )
+            );
+            return (null, diagnostics.ToImmutableArray());
+        }
+
+        return (greediestConstructors[0], diagnostics.ToImmutableArray());
+    }
+
+    private static ImmutableArray<string> GetContainingTypeDeclarations(ClassDeclarationSyntax classNode)
+    {
+        var declarations = new List<string>();
+        SyntaxNode? parent = classNode.Parent;
+        while (parent is ClassDeclarationSyntax parentClass)
+        {
+            declarations.Insert(0, $"public partial class {parentClass.Identifier.Text}");
+            parent = parent.Parent;
+        }
+
+        return declarations.ToImmutableArray();
     }
 }
