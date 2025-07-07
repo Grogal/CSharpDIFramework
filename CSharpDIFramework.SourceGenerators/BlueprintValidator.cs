@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -26,6 +27,8 @@ internal static class BlueprintValidator
                     ValidateImplementationIsConcrete(ctorReg, diagnostics);
                 }
             }
+
+            DetectCycles(blueprint.Registrations, diagnostics);
         }
 
         return new ValidationResult(blueprints, diagnostics.ToImmutableArray());
@@ -82,5 +85,66 @@ internal static class BlueprintValidator
                 )
             );
         }
+    }
+
+    private static void DetectCycles(ImmutableArray<ServiceRegistration> registrations, List<Diagnostic> diagnostics)
+    {
+        var visiting = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        var visited = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+
+        foreach (ServiceRegistration? reg in registrations)
+        {
+            if (reg is null)
+            {
+                continue;
+            }
+
+            if (!visited.Contains(reg.ServiceType))
+            {
+                DetectCyclesRecursive(reg, new Stack<ITypeSymbol>(), visiting, visited, diagnostics);
+            }
+        }
+    }
+
+    private static void DetectCyclesRecursive(
+        ServiceRegistration currentReg,
+        Stack<ITypeSymbol> path,
+        HashSet<ITypeSymbol> visiting,
+        HashSet<ITypeSymbol> visited,
+        List<Diagnostic> diagnostics)
+    {
+        visiting.Add(currentReg.ServiceType);
+        path.Push(currentReg.ServiceType);
+
+        if (currentReg is ConstructorRegistration ctorReg)
+        {
+            foreach (ServiceRegistration? dependency in ctorReg.Dependencies)
+            {
+                if (visiting.Contains(dependency.ServiceType))
+                {
+                    // Cycle detected!
+                    string cyclePath =
+                        string.Join(" -> ", path.Reverse().Select(s => s.Name).Concat([dependency.ServiceType.Name]));
+                    diagnostics.Add(
+                        Diagnostic.Create(
+                            Diagnostics.CyclicDependency,
+                            currentReg.RegistrationLocation,
+                            currentReg.ServiceType.ToDisplayString(),
+                            cyclePath
+                        )
+                    );
+                    continue;
+                }
+
+                if (!visited.Contains(dependency.ServiceType))
+                {
+                    DetectCyclesRecursive(dependency, path, visiting, visited, diagnostics);
+                }
+            }
+        }
+
+        path.Pop();
+        visiting.Remove(currentReg.ServiceType);
+        visited.Add(currentReg.ServiceType);
     }
 }

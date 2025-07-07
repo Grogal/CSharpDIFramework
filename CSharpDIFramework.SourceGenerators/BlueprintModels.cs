@@ -8,6 +8,7 @@ public static class Constants
 {
     public const string RegisterContainerAttributeName = "CSharpDIFramework.RegisterContainerAttribute";
     public const string SingletonAttributeName = "CSharpDIFramework.SingletonAttribute";
+    public const string InjectAttributeName = "CSharpDIFramework.InjectAttribute";
 }
 
 public enum ServiceLifetime

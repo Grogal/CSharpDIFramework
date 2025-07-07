@@ -60,14 +60,19 @@ public class SourceGenerator : IIncrementalGenerator
 
                 if (validationResult.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
                 {
-                    return;
+                    foreach (ContainerBlueprint? blueprint in validationResult.Blueprints)
+                    {
+                        string sourceCode = CodeGenerator.GenerateDummyContainer(blueprint);
+                        spc.AddSource($"{blueprint.ContainerName}.g.cs", sourceCode);
+                    }
                 }
-
-                // Phase 3: Code Generation
-                foreach (ContainerBlueprint? blueprint in validationResult.Blueprints)
+                else
                 {
-                    string sourceCode = CodeGenerator.Generate(blueprint);
-                    spc.AddSource($"{blueprint.ContainerName}.g.cs", sourceCode);
+                    foreach (ContainerBlueprint? blueprint in validationResult.Blueprints)
+                    {
+                        string sourceCode = CodeGenerator.Generate(blueprint);
+                        spc.AddSource($"{blueprint.ContainerName}.g.cs", sourceCode);
+                    }
                 }
             }
         );
