@@ -26,3 +26,41 @@ public class SingletonAttribute : Attribute
     public Type ServiceType { get; }
     public Type ImplementationType { get; }
 }
+
+[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
+public class TransientAttributeName : Attribute
+{
+    public TransientAttributeName(Type serviceType, Type implementationType)
+    {
+        ServiceType = serviceType;
+        ImplementationType = implementationType;
+    }
+
+    public TransientAttributeName(Type concreteType)
+    {
+        ServiceType = concreteType;
+        ImplementationType = concreteType;
+    }
+
+    public Type ServiceType { get; }
+    public Type ImplementationType { get; }
+}
+
+[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
+public class ScopeAttribute : Attribute
+{
+    public ScopeAttribute(Type serviceType, Type implementationType)
+    {
+        ServiceType = serviceType;
+        ImplementationType = implementationType;
+    }
+
+    public ScopeAttribute(Type concreteType)
+    {
+        ServiceType = concreteType;
+        ImplementationType = concreteType;
+    }
+
+    public Type ServiceType { get; }
+    public Type ImplementationType { get; }
+}

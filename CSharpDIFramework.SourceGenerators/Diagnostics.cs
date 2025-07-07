@@ -93,4 +93,13 @@ internal static class Diagnostics
         DiagnosticSeverity.Error,
         true
     );
+
+    public static readonly DiagnosticDescriptor LifestyleMismatch = new(
+        "NDI0011",
+        "Invalid lifestyle mismatch",
+        "Service '{0}' with a '{1}' lifetime cannot depend on service '{2}' with a shorter '{3}' lifetime. This creates a captive dependency.",
+        "CSharpDIFramework.Usage",
+        DiagnosticSeverity.Error, // This is severe enough to be an error.
+        true
+    );
 }

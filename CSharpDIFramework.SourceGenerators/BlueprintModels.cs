@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text;
 
 using Microsoft.CodeAnalysis;
 
@@ -8,6 +9,8 @@ public static class Constants
 {
     public const string RegisterContainerAttributeName = "CSharpDIFramework.RegisterContainerAttribute";
     public const string SingletonAttributeName = "CSharpDIFramework.SingletonAttribute";
+    public const string TransientAttributeName = "CSharpDIFramework.TransientAttribute";
+    public const string ScopeAttributeName = "CSharpDIFramework.ScopeAttribute";
     public const string InjectAttributeName = "CSharpDIFramework.InjectAttribute";
 }
 
@@ -18,11 +21,93 @@ public enum ServiceLifetime
     Singleton
 }
 
+public record ServiceRegistration(
+    ITypeSymbol ServiceType,
+    INamedTypeSymbol ImplementationType,
+    ServiceLifetime Lifetime,
+    Location RegistrationLocation)
+{
+    public ITypeSymbol ServiceType { get; } = ServiceType;
+    public INamedTypeSymbol ImplementationType { get; } = ImplementationType;
+    public ServiceLifetime Lifetime { get; } = Lifetime;
+    public Location RegistrationLocation { get; } = RegistrationLocation;
+}
+
+public record ServiceProviderDescription(
+    INamedTypeSymbol ContainerSymbol,
+    ImmutableArray<ServiceRegistration> Registrations,
+    Location DeclarationLocation)
+{
+    public INamedTypeSymbol ContainerSymbol { get; } = ContainerSymbol;
+    public ImmutableArray<ServiceRegistration> Registrations { get; } = Registrations;
+    public Location DeclarationLocation { get; } = DeclarationLocation;
+
+    public override string ToString()
+    {
+        var builder = new StringBuilder();
+
+        builder.AppendLine("// Generated test output for ServiceProviderDescription");
+        builder.AppendLine($"// Container: {ContainerSymbol.Name}");
+        builder.AppendLine($"// Full Name: {ContainerSymbol.ToDisplayString()}");
+        builder.AppendLine($"// Namespace: {ContainerSymbol.ContainingNamespace?.ToDisplayString() ?? "<global>"}");
+        builder.AppendLine($"// Registration Count: {Registrations.Length}");
+        builder.AppendLine();
+
+        if (Registrations.Length > 0)
+        {
+            builder.AppendLine("// Service Registrations:");
+            for (var i = 0; i < Registrations.Length; i++)
+            {
+                ServiceRegistration registration = Registrations[i];
+                builder.AppendLine(
+                    $"// [{i + 1}] {registration.Lifetime} - [Service]{registration.ServiceType.ToDisplayString()} -> [ResolveTo]{registration.ImplementationType.ToDisplayString()}"
+                );
+            }
+        }
+        else
+        {
+            builder.AppendLine("// No service registrations found");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("// This is a test generation - actual container implementation would be generated here");
+        builder.AppendLine($"namespace {ContainerSymbol.ContainingNamespace?.ToDisplayString() ?? "Global"}");
+        builder.AppendLine("{");
+        builder.AppendLine($"    public partial class {ContainerSymbol.Name}");
+        builder.AppendLine("    {");
+        builder.AppendLine("        // Generated container implementation would go here");
+        builder.AppendLine("    }");
+        builder.AppendLine("}");
+
+        return builder.ToString();
+    }
+}
+
+public record ResolvedService
+{
+    public ResolvedService(
+        ServiceRegistration SourceRegistration,
+        IMethodSymbol SelectedConstructor,
+        ImmutableArray<ResolvedService> Dependencies)
+    {
+        this.SourceRegistration = SourceRegistration;
+        this.SelectedConstructor = SelectedConstructor;
+        this.Dependencies = Dependencies;
+    }
+
+    public ServiceRegistration SourceRegistration { get; }
+    public IMethodSymbol SelectedConstructor { get; }
+    public ImmutableArray<ResolvedService> Dependencies { get; }
+
+    public ITypeSymbol ServiceType => SourceRegistration.ServiceType;
+    public ServiceLifetime Lifetime => SourceRegistration.Lifetime;
+}
+
 public record ContainerBlueprint(
     INamedTypeSymbol ContainerSymbol,
     string ContainerName,
     string? Namespace,
-    ImmutableArray<ServiceRegistration> Registrations,
+    ImmutableArray<ResolvedService> Services, // Changed from Registrations
     Location DeclarationLocation,
     ImmutableArray<string> ContainingTypeDeclarations
 )
@@ -30,7 +115,8 @@ public record ContainerBlueprint(
     public INamedTypeSymbol ContainerSymbol { get; } = ContainerSymbol;
     public string ContainerName { get; } = ContainerName;
     public string? Namespace { get; } = Namespace;
-    public ImmutableArray<ServiceRegistration> Registrations { get; } = Registrations;
+    public ImmutableArray<ResolvedService> Services { get; } = Services;
+
     public Location DeclarationLocation { get; } = DeclarationLocation;
 
     public ImmutableArray<string> ContainingTypeDeclarations { get; } = ContainingTypeDeclarations;
@@ -43,55 +129,4 @@ public record ValidationResult(
 {
     public ImmutableArray<ContainerBlueprint> Blueprints { get; } = Blueprints;
     public ImmutableArray<Diagnostic> Diagnostics { get; } = Diagnostics;
-}
-
-/// <summary>
-///     This is the base class for ALL service registrations.
-/// </summary>
-public abstract record ServiceRegistration
-{
-    /// <summary>
-    ///     This is the base class for ALL service registrations.
-    /// </summary>
-    protected ServiceRegistration(ITypeSymbol ServiceType, ServiceLifetime Lifetime, Location RegistrationLocation)
-    {
-        this.ServiceType = ServiceType;
-        this.Lifetime = Lifetime;
-        this.RegistrationLocation = RegistrationLocation;
-    }
-
-    /// <summary>The type of the service being requested, e.g., IService.</summary>
-    public ITypeSymbol ServiceType { get; }
-
-    public ServiceLifetime Lifetime { get; }
-
-    /// <summary>A location in source code for error reporting.</summary>
-    public Location RegistrationLocation { get; }
-}
-
-public sealed record ConstructorRegistration : ServiceRegistration
-{
-    public ConstructorRegistration(
-        ITypeSymbol ServiceType,
-        ServiceLifetime Lifetime,
-        Location RegistrationLocation,
-        INamedTypeSymbol ImplementationType,
-        IMethodSymbol SelectedConstructor,
-        ImmutableArray<ServiceRegistration> Dependencies) : base(
-        ServiceType, Lifetime, RegistrationLocation
-    )
-    {
-        this.ImplementationType = ImplementationType;
-        this.SelectedConstructor = SelectedConstructor;
-        this.Dependencies = Dependencies;
-    }
-
-    /// <summary>The concrete class to create, e.g., ServiceImpl.</summary>
-    public INamedTypeSymbol ImplementationType { get; }
-
-    /// <summary>The constructor that was selected to create this service.</summary>
-    public IMethodSymbol SelectedConstructor { get; set; }
-
-    /// <summary>A list of the services this constructor depends on.</summary>
-    public ImmutableArray<ServiceRegistration> Dependencies { get; set; }
 }

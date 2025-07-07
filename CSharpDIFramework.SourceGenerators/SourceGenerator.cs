@@ -13,7 +13,7 @@ public class SourceGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        IncrementalValuesProvider<(ContainerBlueprint? Blueprint, ImmutableArray<Diagnostic> Diagnostics)> parsedProvider =
+        IncrementalValuesProvider<(ServiceProviderDescription? Description, ImmutableArray<Diagnostic> Diagnostics)> parsedProvider =
             context.SyntaxProvider
                    .ForAttributeWithMetadataName(
                        Constants.RegisterContainerAttributeName,
@@ -23,9 +23,6 @@ public class SourceGenerator : IIncrementalGenerator
 
         IncrementalValuesProvider<ImmutableArray<Diagnostic>> parsingDiagnostics =
             parsedProvider.Select((source, _) => source.Diagnostics);
-
-        IncrementalValuesProvider<ContainerBlueprint> blueprintProvider =
-            parsedProvider.Select((source, _) => source.Blueprint).Where(bp => bp is not null)!;
 
         context.RegisterSourceOutput(
             parsingDiagnostics, (spc, diagnostics) =>
@@ -37,42 +34,46 @@ public class SourceGenerator : IIncrementalGenerator
             }
         );
 
-        IncrementalValueProvider<(ImmutableArray<ContainerBlueprint> Left, Compilation Right)> combinedProvider =
-            blueprintProvider.Collect().Combine(context.CompilationProvider);
+        IncrementalValuesProvider<ServiceProviderDescription> descriptionProvider =
+            parsedProvider.Select((source, _) => source.Description)
+                          .Where(bp =>
+                              {
+                                  if (bp is null)
+                                  {
+                                      return false;
+                                  }
+
+                                  return true;
+                              }
+                          )!;
 
         context.RegisterSourceOutput(
-            combinedProvider, (spc, source) =>
+            descriptionProvider, (spc, description) =>
             {
-                ImmutableArray<ContainerBlueprint> blueprints = source.Left;
-                Compilation? compilation = source.Right;
-
-                if (blueprints.IsEmpty)
+                if (description is null)
                 {
                     return;
                 }
 
-                ValidationResult validationResult = BlueprintValidator.Validate(blueprints, compilation);
+                // spc.AddSource($"{description.ContainerSymbol.Name}.g.cs", description.ToString());
 
-                foreach (Diagnostic? diagnostic in validationResult.Diagnostics)
+                var graphBuilder = new GraphBuilder(description);
+                (ContainerBlueprint? blueprint, ImmutableArray<Diagnostic> diagnostics) = graphBuilder.Build();
+
+                foreach (Diagnostic? diagnostic in diagnostics)
                 {
                     spc.ReportDiagnostic(diagnostic);
                 }
 
-                if (validationResult.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+                if (diagnostics.Any(d => d.Severity == DiagnosticSeverity.Warning || d.Severity == DiagnosticSeverity.Error))
                 {
-                    foreach (ContainerBlueprint? blueprint in validationResult.Blueprints)
-                    {
-                        string sourceCode = CodeGenerator.GenerateDummyContainer(blueprint);
-                        spc.AddSource($"{blueprint.ContainerName}.g.cs", sourceCode);
-                    }
+                    string dummyBlueprintName = description.ContainerSymbol.Name;
+                    spc.AddSource($"{dummyBlueprintName}.g.cs", CodeGenerator.GenerateDummyFromName(dummyBlueprintName, description.ContainerSymbol));
                 }
-                else
+                else if (blueprint != null)
                 {
-                    foreach (ContainerBlueprint? blueprint in validationResult.Blueprints)
-                    {
-                        string sourceCode = CodeGenerator.Generate(blueprint);
-                        spc.AddSource($"{blueprint.ContainerName}.g.cs", sourceCode);
-                    }
+                    string sourceCode = CodeGenerator.Generate(blueprint);
+                    spc.AddSource($"{blueprint.ContainerName}.g.cs", sourceCode);
                 }
             }
         );

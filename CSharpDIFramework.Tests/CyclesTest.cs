@@ -195,20 +195,20 @@ public interface ICycleBreakerB { }
 
 public class CycleBreakerB(ICycleBreakerA a) : ICycleBreakerB { }
 
-// [RegisterContainer]
-// [Singleton(typeof(ISimpleA), typeof(SimpleA))]
-// [Singleton(typeof(ISimpleB), typeof(SimpleB))]
-// public partial class S1 { }
-//
-// [RegisterContainer]
-// [Singleton(typeof(ILongA), typeof(LongA))]
-// [Singleton(typeof(ILongB), typeof(LongB))]
-// [Singleton(typeof(ILongC), typeof(LongC))]
-// public partial class S2 { }
-//
-// [RegisterContainer]
-// [Singleton(typeof(ISelfReference), typeof(SelfReference))]
-// public partial class S3 { }
+[RegisterContainer]
+[Singleton(typeof(ISimpleA), typeof(SimpleA))]
+[Singleton(typeof(ISimpleB), typeof(SimpleB))]
+public partial class S1 { }
+
+[RegisterContainer]
+[Singleton(typeof(ILongA), typeof(LongA))]
+[Singleton(typeof(ILongB), typeof(LongB))]
+[Singleton(typeof(ILongC), typeof(LongC))]
+public partial class S2 { }
+
+[RegisterContainer]
+[Singleton(typeof(ISelfReference), typeof(SelfReference))]
+public partial class S3 { }
 
 // public partial class S4 { }
 
@@ -221,11 +221,11 @@ public class CycleBreakerB(ICycleBreakerA a) : ICycleBreakerB { }
 [Singleton(typeof(IDiamondD), typeof(DiamondD))]
 public partial class S6 { }
 
-// [RegisterContainer]
-// [Singleton(typeof(IComplexService), typeof(ComplexService))]
-// [Singleton(typeof(ITriggerService), typeof(TriggerService))]
-// [Singleton(typeof(SafeDependency), typeof(SafeDependency))]
-// public partial class S7 { }
+[RegisterContainer]
+[Singleton(typeof(IComplexService), typeof(ComplexService))]
+[Singleton(typeof(ITriggerService), typeof(TriggerService))]
+[Singleton(typeof(SafeDependency), typeof(SafeDependency))]
+public partial class S7 { }
 
 // [RegisterContainer]
 // [Singleton(typeof(IGenericCycleA<int>), typeof(GenericCycleA<int>))]
@@ -242,9 +242,9 @@ public partial class S6 { }
 //
 // public partial class S12 { }
 //
-// [RegisterContainer]
-// [Singleton(typeof(IServiceThatStartsTheCycle), typeof(ServiceThatStartsTheCycle))]
-// public partial class S13 { }
+[RegisterContainer]
+[Singleton(typeof(IServiceThatStartsTheCycle), typeof(ServiceThatStartsTheCycle))]
+public partial class S13 { }
 //
 // [RegisterContainer]
 // [Singleton(typeof(ICycleBreakerA), typeof(CycleBreakerA))]

@@ -1,11 +1,12 @@
 ﻿<wpf:ResourceDictionary xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                         xmlns:s="clr-namespace:System;assembly=mscorlib"
-                        xmlns:wpf="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                        xml:space="preserve">
+                        xmlns:wpf="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xml:space="preserve">
 	<s:String
             x:Key="/Default/CodeInspection/ExcludedFiles/FilesAndFoldersToSkip2/=7020124F_002D9FFC_002D4AC3_002D8F3D_002DAAB8E0240759_002Ff_003AAssemblyLoader_002Eg_002Ecs_002Fl_003AC_0021_003FUsers_003FAlekseyK_003FAppData_003FRoaming_003FJetBrains_003FRider2025_002E2_003Fresharper_002Dhost_003FSourcesCache_003F2e7e5d7cf69f8a942c46d47926f31fa3c68a82_003FAssemblyLoader_002Eg_002Ecs/@EntryIndexedValue">ForceIncluded</s:String>
     <s:String
             x:Key="/Default/CodeInspection/ExcludedFiles/FilesAndFoldersToSkip2/=7020124F_002D9FFC_002D4AC3_002D8F3D_002DAAB8E0240759_002Ff_003AObject_002Ecs_002Fl_003AC_0021_003FUsers_003FAlekseyK_003FAppData_003FRoaming_003FJetBrains_003FRider2025_002E2_003Fresharper_002Dhost_003FSourcesCache_003F9a6b1457cbcf17db31a383ba49ef9bcc786cf3ef77146d997eee499b27a46d_003FObject_002Ecs/@EntryIndexedValue">ForceIncluded</s:String>
+    <s:String
+            x:Key="/Default/CodeInspection/ExcludedFiles/FilesAndFoldersToSkip2/=7020124F_002D9FFC_002D4AC3_002D8F3D_002DAAB8E0240759_002Ff_003AOptional_002Ecs_002Fl_003AC_0021_003FUsers_003FAlekseyK_003FAppData_003FRoaming_003FJetBrains_003FRider2025_002E2_003Fresharper_002Dhost_003FSourcesCache_003Fbb5a3c7661962edf858bb36ed4428b235dfb1ab7c6f111639bccfa70a33d5_003FOptional_002Ecs/@EntryIndexedValue">ForceIncluded</s:String>
     <s:String
             x:Key="/Default/CodeInspection/ExcludedFiles/FilesAndFoldersToSkip2/=7020124F_002D9FFC_002D4AC3_002D8F3D_002DAAB8E0240759_002Ff_003ASyntaxToken_002Ecs_002Fl_003AC_0021_003FUsers_003FAlekseyK_003FAppData_003FRoaming_003FJetBrains_003FRider2025_002E2_003Fresharper_002Dhost_003FSourcesCache_003F5f381abd28c2c4d42448d02eb9e765751382f2c349df82c2230862074ca8e62_003FSyntaxToken_002Ecs/@EntryIndexedValue">ForceIncluded</s:String>
     <s:String
