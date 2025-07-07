@@ -1,12 +1,18 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+
+using Microsoft.CodeAnalysis;
 
 namespace CSharpDIFramework.SourceGenerators;
 
 internal static class CodeGenerator
 {
-    /// <summary>
-    /// Generates the C# source code for a given container blueprint.
-    /// </summary>
+    private static readonly SymbolDisplayFormat s_fullyQualifiedFormat = SymbolDisplayFormat.FullyQualifiedFormat
+                                                                                            .WithGlobalNamespaceStyle(
+                                                                                                SymbolDisplayGlobalNamespaceStyle.Included
+                                                                                            );
+
     public static string Generate(ContainerBlueprint blueprint)
     {
         var sb = new StringBuilder();
@@ -15,19 +21,148 @@ internal static class CodeGenerator
         sb.AppendLine("#nullable enable");
         sb.AppendLine();
 
-        bool hasNamespace = !string.IsNullOrEmpty(blueprint.Namespace);
-        if (hasNamespace)
+        if (!string.IsNullOrEmpty(blueprint.Namespace))
         {
             sb.AppendLine($"namespace {blueprint.Namespace!};");
             sb.AppendLine();
         }
 
-        sb.AppendLine($"public partial class {blueprint.ContainerName}");
-        sb.AppendLine("{");
-        // In future milestones, we will generate fields, constructors,
-        // and the Resolve<T> method here.
-        sb.AppendLine("}");
+        // Calculate base indentation level based on containing type declarations
+        var indentLevel = 0;
+        foreach (string? declaration in blueprint.ContainingTypeDeclarations)
+        {
+            sb.AppendLine($"{new string(' ', indentLevel * 4)}{declaration}");
+            sb.AppendLine($"{new string(' ', indentLevel * 4)}{{");
+            indentLevel++;
+        }
+
+        // Generate the container class with proper indentation
+        var baseIndent = new string(' ', indentLevel * 4);
+        sb.AppendLine($"{baseIndent}public partial class {blueprint.ContainerName}");
+        sb.AppendLine($"{baseIndent}{{");
+
+        List<ServiceRegistration> singletons = blueprint.Registrations.Where(r => r.Lifetime == ServiceLifetime.Singleton).ToList();
+        GenerateSingletonFields(sb, singletons, indentLevel + 1);
+        GenerateConstructor(sb, blueprint.ContainerName, singletons, indentLevel + 1);
+        GenerateSingletonFactories(sb, singletons, indentLevel + 1);
+        GenerateResolveMethod(sb, blueprint, indentLevel + 1);
+
+        sb.AppendLine($"{baseIndent}}}");
+
+        // Close all containing type declarations
+        for (int i = indentLevel - 1; i >= 0; i--)
+        {
+            sb.AppendLine($"{new string(' ', i * 4)}}}");
+        }
 
         return sb.ToString();
+    }
+
+    private static void GenerateSingletonFields(StringBuilder sb, List<ServiceRegistration> singletons, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 4);
+        foreach (ServiceRegistration? reg in singletons)
+        {
+            string serviceType = reg.ServiceType.ToDisplayString(s_fullyQualifiedFormat);
+            sb.AppendLine($"{indent}private readonly global::System.Lazy<{serviceType}> {GetSingletonFieldName(reg.ServiceType)};");
+        }
+
+        sb.AppendLine();
+    }
+
+    private static void GenerateConstructor(StringBuilder sb, string containerName, List<ServiceRegistration> singletons, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 4);
+        var innerIndent = new string(' ', (indentLevel + 1) * 4);
+
+        sb.AppendLine($"{indent}public {containerName}()");
+        sb.AppendLine($"{indent}{{");
+        foreach (ServiceRegistration? reg in singletons)
+        {
+            string serviceType = reg.ServiceType.ToDisplayString(s_fullyQualifiedFormat);
+            sb.AppendLine(
+                $"{innerIndent}{GetSingletonFieldName(reg.ServiceType)} = new global::System.Lazy<{serviceType}>(() => {GetFactoryMethodName(reg.ServiceType)}());"
+            );
+        }
+
+        sb.AppendLine($"{indent}}}");
+        sb.AppendLine();
+    }
+
+    private static void GenerateSingletonFactories(StringBuilder sb, List<ServiceRegistration> singletons, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 4);
+        var innerIndent = new string(' ', (indentLevel + 1) * 4);
+
+        foreach (ServiceRegistration? reg in singletons)
+        {
+            if (reg is not ConstructorRegistration ctorReg)
+            {
+                continue;
+            }
+
+            string serviceType = ctorReg.ServiceType.ToDisplayString(s_fullyQualifiedFormat);
+            string implType = ctorReg.ImplementationType.ToDisplayString(s_fullyQualifiedFormat);
+
+            sb.AppendLine($"{indent}private {serviceType} {GetFactoryMethodName(ctorReg.ServiceType)}()");
+            sb.AppendLine($"{indent}{{");
+            // For now, it's always a parameterless new(). This will become recursive in Milestone 2.1.
+            sb.AppendLine($"{innerIndent}return new {implType}();");
+            sb.AppendLine($"{indent}}}");
+            sb.AppendLine();
+        }
+    }
+
+    private static void GenerateResolveMethod(StringBuilder sb, ContainerBlueprint blueprint, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 4);
+        var innerIndent = new string(' ', (indentLevel + 1) * 4);
+        var doubleIndent = new string(' ', (indentLevel + 2) * 4);
+
+        sb.AppendLine($"{indent}public T Resolve<T>()");
+        sb.AppendLine($"{indent}{{");
+
+        var isFirst = true;
+        foreach (ServiceRegistration? reg in blueprint.Registrations)
+        {
+            string ifPrefix = isFirst ? "if" : "else if";
+            isFirst = false;
+
+            string serviceType = reg.ServiceType.ToDisplayString(s_fullyQualifiedFormat);
+            sb.AppendLine($"{innerIndent}{ifPrefix} (typeof(T) == typeof({serviceType}))");
+            sb.AppendLine($"{innerIndent}{{");
+
+            switch (reg.Lifetime)
+            {
+                case ServiceLifetime.Singleton:
+                    sb.AppendLine($"{doubleIndent}return (T)(object){GetSingletonFieldName(reg.ServiceType)}.Value;");
+                    break;
+                // Scoped/Transient will be implemented later.
+            }
+
+            sb.AppendLine($"{innerIndent}}}");
+        }
+
+        sb.AppendLine($"{innerIndent}throw new global::System.InvalidOperationException($\"Service of type {{typeof(T).FullName}} is not registered.\");");
+        sb.AppendLine($"{indent}}}");
+    }
+
+    // --- Helper Methods for Naming ---
+
+    private static string SanitizeTypeName(ITypeSymbol typeSymbol)
+    {
+        // This replaces characters that are invalid in an identifier with underscores.
+        // e.g., "My.Generic<System.Int32>" becomes "My_Generic_System_Int32_"
+        return typeSymbol.ToDisplayString().Replace(".", "_").Replace("<", "_").Replace(">", "_").Replace(",", "_");
+    }
+
+    private static string GetSingletonFieldName(ITypeSymbol serviceType)
+    {
+        return $"_singleton_{SanitizeTypeName(serviceType)}";
+    }
+
+    private static string GetFactoryMethodName(ITypeSymbol serviceType)
+    {
+        return $"Create_{SanitizeTypeName(serviceType)}";
     }
 }

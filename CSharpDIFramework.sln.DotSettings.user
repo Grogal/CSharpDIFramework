@@ -1,0 +1,16 @@
+﻿<wpf:ResourceDictionary xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                        xmlns:s="clr-namespace:System;assembly=mscorlib"
+                        xmlns:wpf="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                        xml:space="preserve">
+	<s:String
+            x:Key="/Default/CodeInspection/ExcludedFiles/FilesAndFoldersToSkip2/=7020124F_002D9FFC_002D4AC3_002D8F3D_002DAAB8E0240759_002Ff_003AAssemblyLoader_002Eg_002Ecs_002Fl_003AC_0021_003FUsers_003FAlekseyK_003FAppData_003FRoaming_003FJetBrains_003FRider2025_002E2_003Fresharper_002Dhost_003FSourcesCache_003F2e7e5d7cf69f8a942c46d47926f31fa3c68a82_003FAssemblyLoader_002Eg_002Ecs/@EntryIndexedValue">ForceIncluded</s:String>
+    <s:String
+            x:Key="/Default/CodeInspection/ExcludedFiles/FilesAndFoldersToSkip2/=7020124F_002D9FFC_002D4AC3_002D8F3D_002DAAB8E0240759_002Ff_003AObject_002Ecs_002Fl_003AC_0021_003FUsers_003FAlekseyK_003FAppData_003FRoaming_003FJetBrains_003FRider2025_002E2_003Fresharper_002Dhost_003FSourcesCache_003F9a6b1457cbcf17db31a383ba49ef9bcc786cf3ef77146d997eee499b27a46d_003FObject_002Ecs/@EntryIndexedValue">ForceIncluded</s:String>
+    <s:String
+            x:Key="/Default/CodeInspection/ExcludedFiles/FilesAndFoldersToSkip2/=7020124F_002D9FFC_002D4AC3_002D8F3D_002DAAB8E0240759_002Ff_003ASyntaxToken_002Ecs_002Fl_003AC_0021_003FUsers_003FAlekseyK_003FAppData_003FRoaming_003FJetBrains_003FRider2025_002E2_003Fresharper_002Dhost_003FSourcesCache_003F5f381abd28c2c4d42448d02eb9e765751382f2c349df82c2230862074ca8e62_003FSyntaxToken_002Ecs/@EntryIndexedValue">ForceIncluded</s:String>
+    <s:String
+            x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=3851a858_002Dc4e8_002D4a33_002D9ad4_002D038ebec0b309/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="SimpleResolveContainer" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;TestAncestor&gt;&#xD;
+    &lt;TestId&gt;Testing Platform::5EE1A188-BBF4-409D-9E1F-F12803D1D5A0::net8.0::CSharpDIFramework.Tests.ContainerTests.SimpleResolveContainer:0&lt;/TestId&gt;&#xD;
+  &lt;/TestAncestor&gt;&#xD;
+&lt;/SessionState&gt;</s:String></wpf:ResourceDictionary>

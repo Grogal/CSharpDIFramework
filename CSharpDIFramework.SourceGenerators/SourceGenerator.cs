@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Linq;
 
 using Microsoft.CodeAnalysis;
@@ -8,27 +9,51 @@ namespace CSharpDIFramework.SourceGenerators;
 [Generator]
 public class SourceGenerator : IIncrementalGenerator
 {
-    private const string RegisterContainerAttributeName = "CSharpDIFramework.RegisterContainerAttribute";
+    #region IIncrementalGenerator Implementation
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        IncrementalValuesProvider<ContainerBlueprint> blueprintProvider =
+        IncrementalValuesProvider<(ContainerBlueprint? Blueprint, ImmutableArray<Diagnostic> Diagnostics)> parsedProvider =
             context.SyntaxProvider
                    .ForAttributeWithMetadataName(
-                       RegisterContainerAttributeName,
+                       Constants.RegisterContainerAttributeName,
                        (node, _) => node is ClassDeclarationSyntax,
                        (ctx, _) => BlueprintParser.Parse(ctx)
-                   )
-                   .Where(bp => bp is not null)!;
+                   );
 
-        var collectedBlueprints = blueprintProvider.Collect();
+        IncrementalValuesProvider<ImmutableArray<Diagnostic>> parsingDiagnostics =
+            parsedProvider.Select((source, _) => source.Diagnostics);
+
+        IncrementalValuesProvider<ContainerBlueprint> blueprintProvider =
+            parsedProvider.Select((source, _) => source.Blueprint).Where(bp => bp is not null)!;
 
         context.RegisterSourceOutput(
-            collectedBlueprints, (spc, blueprints) =>
+            parsingDiagnostics, (spc, diagnostics) =>
             {
-                ValidationResult validationResult = BlueprintValidator.Validate(blueprints);
+                foreach (Diagnostic? diagnostic in diagnostics)
+                {
+                    spc.ReportDiagnostic(diagnostic);
+                }
+            }
+        );
 
-                foreach (var diagnostic in validationResult.Diagnostics)
+        IncrementalValueProvider<(ImmutableArray<ContainerBlueprint> Left, Compilation Right)> combinedProvider =
+            blueprintProvider.Collect().Combine(context.CompilationProvider);
+
+        context.RegisterSourceOutput(
+            combinedProvider, (spc, source) =>
+            {
+                ImmutableArray<ContainerBlueprint> blueprints = source.Left;
+                Compilation? compilation = source.Right;
+
+                if (blueprints.IsEmpty)
+                {
+                    return;
+                }
+
+                ValidationResult validationResult = BlueprintValidator.Validate(blueprints, compilation);
+
+                foreach (Diagnostic? diagnostic in validationResult.Diagnostics)
                 {
                     spc.ReportDiagnostic(diagnostic);
                 }
@@ -38,8 +63,8 @@ public class SourceGenerator : IIncrementalGenerator
                     return;
                 }
 
-                // Phase 3: Generate code for each valid blueprint.
-                foreach (var blueprint in validationResult.Blueprints)
+                // Phase 3: Code Generation
+                foreach (ContainerBlueprint? blueprint in validationResult.Blueprints)
                 {
                     string sourceCode = CodeGenerator.Generate(blueprint);
                     spc.AddSource($"{blueprint.ContainerName}.g.cs", sourceCode);
@@ -47,4 +72,6 @@ public class SourceGenerator : IIncrementalGenerator
             }
         );
     }
+
+    #endregion
 }
