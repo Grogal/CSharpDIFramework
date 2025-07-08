@@ -1,9 +1,3 @@
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Text;
-
-using Microsoft.CodeAnalysis;
-
 namespace CSharpDIFramework.SourceGenerators;
 
 public static class Constants
@@ -25,122 +19,100 @@ public enum ServiceLifetime
     Singleton
 }
 
+public record ConstructorInfo(
+    EquatableArray<string> ParameterTypeFullNames,
+    bool HasInjectAttribute)
+{
+    public EquatableArray<string> ParameterTypeFullNames { get; } = ParameterTypeFullNames;
+    public bool HasInjectAttribute { get; } = HasInjectAttribute;
+}
+
+public record ServiceImplementationType(
+    string FullName,
+    LocationInfo? Location,
+    EquatableArray<ConstructorInfo> Constructors)
+{
+    public string FullName { get; } = FullName;
+    public LocationInfo? Location { get; } = Location;
+    public EquatableArray<ConstructorInfo> Constructors { get; } = Constructors;
+}
+
+public record DecoratorInfo(
+    string FullName,
+    LocationInfo? Location,
+    EquatableArray<ConstructorInfo> Constructors)
+{
+    public string FullName { get; } = FullName;
+    public LocationInfo? Location { get; } = Location;
+    public EquatableArray<ConstructorInfo> Constructors { get; } = Constructors;
+}
+
 public record ServiceRegistration(
     string ServiceTypeFullName,
-    INamedTypeSymbol ImplementationType,
+    ServiceImplementationType ImplementationType,
     ServiceLifetime Lifetime,
     LocationInfo? RegistrationLocation,
     bool IsDisposable)
 {
     public string ServiceTypeFullName { get; } = ServiceTypeFullName;
-    public INamedTypeSymbol ImplementationType { get; } = ImplementationType;
+    public ServiceImplementationType ImplementationType { get; } = ImplementationType;
     public ServiceLifetime Lifetime { get; } = Lifetime;
     public LocationInfo? RegistrationLocation { get; } = RegistrationLocation;
     public bool IsDisposable { get; } = IsDisposable;
-
-    public HashSet<INamedTypeSymbol> DecoratorTypes { get; set; } = new(SymbolEqualityComparer.Default);
+    public EquatableArray<DecoratorInfo> Decorators { get; set; } = EquatableArray<DecoratorInfo>.Empty;
 }
 
 public record ServiceProviderDescription(
-    INamedTypeSymbol ContainerSymbol,
-    ImmutableArray<ServiceRegistration> Registrations,
+    string ContainerFullName,
+    string ContainerName,
+    string? Namespace,
+    EquatableArray<string> ContainingTypeDeclarations,
+    EquatableArray<ServiceRegistration> Registrations,
     LocationInfo? DeclarationLocation)
 {
-    public INamedTypeSymbol ContainerSymbol { get; } = ContainerSymbol;
-    public ImmutableArray<ServiceRegistration> Registrations { get; } = Registrations;
+    public string ContainerFullName { get; } = ContainerFullName;
+    public string ContainerName { get; } = ContainerName;
+    public string? Namespace { get; } = Namespace;
+    public EquatableArray<string> ContainingTypeDeclarations { get; } = ContainingTypeDeclarations;
+    public EquatableArray<ServiceRegistration> Registrations { get; } = Registrations;
     public LocationInfo? DeclarationLocation { get; } = DeclarationLocation;
-
-    public override string ToString()
-    {
-        var builder = new StringBuilder();
-
-        builder.AppendLine("// Generated test output for ServiceProviderDescription");
-        builder.AppendLine($"// Container: {ContainerSymbol.Name}");
-        builder.AppendLine($"// Full Name: {ContainerSymbol.ToDisplayString()}");
-        builder.AppendLine($"// Namespace: {ContainerSymbol.ContainingNamespace?.ToDisplayString() ?? "<global>"}");
-        builder.AppendLine($"// Registration Count: {Registrations.Length}");
-        builder.AppendLine();
-
-        if (Registrations.Length > 0)
-        {
-            builder.AppendLine("// Service Registrations:");
-            for (var i = 0; i < Registrations.Length; i++)
-            {
-                ServiceRegistration registration = Registrations[i];
-                builder.AppendLine(
-                    $"// [{i + 1}] {registration.Lifetime} - [Service]{registration.ServiceTypeFullName} -> [ResolveTo]{registration.ImplementationType.ToDisplayString()}"
-                );
-            }
-        }
-        else
-        {
-            builder.AppendLine("// No service registrations found");
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("// This is a test generation - actual container implementation would be generated here");
-        builder.AppendLine($"namespace {ContainerSymbol.ContainingNamespace?.ToDisplayString() ?? "Global"}");
-        builder.AppendLine("{");
-        builder.AppendLine($"    public partial class {ContainerSymbol.Name}");
-        builder.AppendLine("    {");
-        builder.AppendLine("        // Generated container implementation would go here");
-        builder.AppendLine("    }");
-        builder.AppendLine("}");
-
-        return builder.ToString();
-    }
 }
 
 public record ResolvedDecorator(
-    INamedTypeSymbol DecoratorType,
-    IMethodSymbol SelectedConstructor,
-    ImmutableArray<ResolvedService> Dependencies
+    DecoratorInfo SourceDecorator,
+    ConstructorInfo SelectedConstructor,
+    EquatableArray<ResolvedService> Dependencies
 )
 {
-    public INamedTypeSymbol DecoratorType { get; } = DecoratorType;
-    public IMethodSymbol SelectedConstructor { get; } = SelectedConstructor;
-    public ImmutableArray<ResolvedService> Dependencies { get; } = Dependencies;
+    public DecoratorInfo SourceDecorator { get; } = SourceDecorator;
+    public ConstructorInfo SelectedConstructor { get; } = SelectedConstructor;
+    public EquatableArray<ResolvedService> Dependencies { get; } = Dependencies;
 }
 
-public record ResolvedService
+public record ResolvedService(
+    ServiceRegistration SourceRegistration,
+    ConstructorInfo SelectedConstructor,
+    EquatableArray<ResolvedService> Dependencies,
+    EquatableArray<ResolvedDecorator> Decorators
+)
 {
-    public ResolvedService(
-        ServiceRegistration sourceRegistration,
-        IMethodSymbol selectedConstructor,
-        ImmutableArray<ResolvedService> dependencies,
-        ImmutableArray<ResolvedDecorator> decorators)
-    {
-        SourceRegistration = sourceRegistration;
-        SelectedConstructor = selectedConstructor;
-        Dependencies = dependencies;
-        Decorators = decorators;
-    }
-
-    public ServiceRegistration SourceRegistration { get; }
-    public IMethodSymbol SelectedConstructor { get; }
-    public ImmutableArray<ResolvedService> Dependencies { get; }
-
-    public ImmutableArray<ResolvedDecorator> Decorators { get; }
-
     public string ServiceTypeFullName => SourceRegistration.ServiceTypeFullName;
     public ServiceLifetime Lifetime => SourceRegistration.Lifetime;
+    public ServiceRegistration SourceRegistration { get; } = SourceRegistration;
+    public ConstructorInfo SelectedConstructor { get; } = SelectedConstructor;
+    public EquatableArray<ResolvedService> Dependencies { get; } = Dependencies;
+    public EquatableArray<ResolvedDecorator> Decorators { get; } = Decorators;
 }
 
 public record ContainerBlueprint(
-    INamedTypeSymbol ContainerSymbol,
     string ContainerName,
     string? Namespace,
-    ImmutableArray<ResolvedService> Services, // Changed from Registrations
-    LocationInfo? DeclarationLocation,
-    ImmutableArray<string> ContainingTypeDeclarations
+    EquatableArray<ResolvedService> Services,
+    EquatableArray<string> ContainingTypeDeclarations
 )
 {
-    public INamedTypeSymbol ContainerSymbol { get; } = ContainerSymbol;
     public string ContainerName { get; } = ContainerName;
     public string? Namespace { get; } = Namespace;
-    public ImmutableArray<ResolvedService> Services { get; } = Services;
-
-    public LocationInfo? DeclarationLocation { get; } = DeclarationLocation;
-
-    public ImmutableArray<string> ContainingTypeDeclarations { get; } = ContainingTypeDeclarations;
+    public EquatableArray<ResolvedService> Services { get; } = Services;
+    public EquatableArray<string> ContainingTypeDeclarations { get; } = ContainingTypeDeclarations;
 }

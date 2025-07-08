@@ -1,19 +1,11 @@
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-
-using Microsoft.CodeAnalysis;
 
 namespace CSharpDIFramework.SourceGenerators;
 
 internal static class CodeGenerator
 {
-    private static readonly SymbolDisplayFormat s_fullyQualifiedFormat = SymbolDisplayFormat.FullyQualifiedFormat
-                                                                                            .WithGlobalNamespaceStyle(
-                                                                                                SymbolDisplayGlobalNamespaceStyle.Included
-                                                                                            );
-
     public static string Generate(ContainerBlueprint blueprint)
     {
         var sb = new StringBuilder();
@@ -28,23 +20,20 @@ internal static class CodeGenerator
             sb.AppendLine();
         }
 
-        // Calculate base indentation level based on containing type declarations
         var indentLevel = 0;
-        foreach (string? declaration in blueprint.ContainingTypeDeclarations)
+        foreach (string declaration in blueprint.ContainingTypeDeclarations)
         {
             sb.AppendLine($"{new string(' ', indentLevel * 4)}{declaration}");
             sb.AppendLine($"{new string(' ', indentLevel * 4)}{{");
             indentLevel++;
         }
 
-        // Generate the container class with proper indentation
         var baseIndent = new string(' ', indentLevel * 4);
         sb.AppendLine($"{baseIndent}public partial class {blueprint.ContainerName} : global::System.IDisposable");
         sb.AppendLine($"{baseIndent}{{");
         sb.AppendLine($"{baseIndent}    private bool _isDisposed;");
 
-        List<ResolvedService> singletons =
-            blueprint.Services.Where(s => s.Lifetime == ServiceLifetime.Singleton).ToList();
+        List<ResolvedService> singletons = blueprint.Services.GetArray()!.Where(s => s.Lifetime == ServiceLifetime.Singleton).ToList();
 
         GenerateSingletonFields(sb, singletons, indentLevel + 1);
         GenerateConstructor(sb, blueprint.ContainerName, singletons, indentLevel + 1);
@@ -56,7 +45,6 @@ internal static class CodeGenerator
 
         sb.AppendLine($"{baseIndent}}}");
 
-        // Close all containing type declarations
         for (int i = indentLevel - 1; i >= 0; i--)
         {
             sb.AppendLine($"{new string(' ', i * 4)}}}");
@@ -65,15 +53,7 @@ internal static class CodeGenerator
         return sb.ToString();
     }
 
-    public static string GenerateDummyFromName(string containerName, INamedTypeSymbol containerSymbol)
-    {
-        ImmutableArray<string> containingDecls = GraphBuilder.GetContainingTypeDeclarations(containerSymbol);
-        string? ns = containerSymbol.ContainingNamespace.IsGlobalNamespace ? null : containerSymbol.ContainingNamespace.ToDisplayString();
-        var dummyBlueprint = new ContainerBlueprint(containerSymbol, containerName, ns, ImmutableArray<ResolvedService>.Empty, null, containingDecls);
-        return GenerateDummyContainer(dummyBlueprint);
-    }
-
-    public static string GenerateDummyContainer(ContainerBlueprint blueprint)
+    public static string GenerateDummyContainer(ServiceProviderDescription description)
     {
         var sb = new StringBuilder();
 
@@ -83,26 +63,27 @@ internal static class CodeGenerator
         sb.AppendLine("#nullable enable");
         sb.AppendLine();
 
-        if (!string.IsNullOrEmpty(blueprint.Namespace))
+        if (!string.IsNullOrEmpty(description.Namespace))
         {
-            sb.AppendLine($"namespace {blueprint.Namespace!};");
+            sb.AppendLine($"namespace {description.Namespace!};");
             sb.AppendLine();
         }
 
-        foreach (string declaration in blueprint.ContainingTypeDeclarations)
+        foreach (string declaration in description.ContainingTypeDeclarations)
         {
             sb.AppendLine(declaration);
             sb.AppendLine("{");
         }
 
-        var indent = new string(' ', blueprint.ContainingTypeDeclarations.Length * 4);
-        sb.AppendLine($"{indent}public partial class {blueprint.ContainerName}");
+        var indent = new string(' ', description.ContainingTypeDeclarations.Count * 4);
+        sb.AppendLine($"{indent}public partial class {description.ContainerName}");
         sb.AppendLine($"{indent}{{");
         sb.AppendLine($"{indent}    private const string ErrorMessage = \"CSharpDIFramework container generation failed. See compile-time errors.\";");
         sb.AppendLine($"{indent}    public T Resolve<T>() => throw new global::System.InvalidOperationException(ErrorMessage);");
+        sb.AppendLine($"{indent}    public void Dispose() {{}}");
         sb.AppendLine($"{indent}}}");
 
-        for (int i = blueprint.ContainingTypeDeclarations.Length - 1; i >= 0; i--)
+        for (int i = description.ContainingTypeDeclarations.Count - 1; i >= 0; i--)
         {
             sb.AppendLine($"{new string(' ', i * 4)}}}");
         }
@@ -343,24 +324,25 @@ internal static class CodeGenerator
 
     private static string GenerateInstanceCreation(ResolvedService service, string resolverContext)
     {
-        string baseImplType = service.SourceRegistration.ImplementationType.ToDisplayString(s_fullyQualifiedFormat);
-        IEnumerable<string> baseArgs =
-            service.Dependencies.Select(d => $"{resolverContext}.Resolve<{d.ServiceTypeFullName}>()");
+        string baseImplType = service.SourceRegistration.ImplementationType.FullName;
+        IEnumerable<string> baseArgs = service.Dependencies.GetArray()!
+                                              .Select(d => $"{resolverContext}.Resolve<{d.ServiceTypeFullName}>()");
         var currentCall = $"new {baseImplType}({string.Join(", ", baseArgs)})";
 
-        foreach (ResolvedDecorator? decorator in service.Decorators)
+        foreach (ResolvedDecorator decorator in service.Decorators)
         {
-            string decoratorTypeName = decorator.DecoratorType.ToDisplayString(s_fullyQualifiedFormat);
+            string decoratorTypeName = decorator.SourceDecorator.FullName;
             var decoratorArgs = new List<string>();
-            foreach (IParameterSymbol? param in decorator.SelectedConstructor.Parameters)
+
+            foreach (string paramTypeName in decorator.SelectedConstructor.ParameterTypeFullNames)
             {
-                if (param.Type.ToDisplayString(s_fullyQualifiedFormat) == service.ServiceTypeFullName)
+                if (paramTypeName == service.ServiceTypeFullName)
                 {
                     decoratorArgs.Add(currentCall);
                 }
                 else
                 {
-                    decoratorArgs.Add($"{resolverContext}.Resolve<{param.Type.ToDisplayString(s_fullyQualifiedFormat)}>()");
+                    decoratorArgs.Add($"{resolverContext}.Resolve<{paramTypeName}>()");
                 }
             }
 

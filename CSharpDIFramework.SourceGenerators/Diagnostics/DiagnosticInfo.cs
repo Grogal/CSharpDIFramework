@@ -9,13 +9,15 @@ internal sealed record DiagnosticInfo
         Location location,
         string? messageArg1 = null,
         string? messageArg2 = null,
-        string? messageArg3 = null)
+        string? messageArg3 = null,
+        string? messageArg4 = null)
     {
         Descriptor = descriptor;
         Location = LocationInfo.CreateFrom(location);
         MessageArg1 = messageArg1;
         MessageArg2 = messageArg2;
         MessageArg3 = messageArg3;
+        MessageArg4 = messageArg4;
     }
 
     public DiagnosticInfo(
@@ -23,13 +25,15 @@ internal sealed record DiagnosticInfo
         LocationInfo? location,
         string? messageArg1 = null,
         string? messageArg2 = null,
-        string? messageArg3 = null)
+        string? messageArg3 = null,
+        string? messageArg4 = null)
     {
         Descriptor = descriptor;
         Location = location;
         MessageArg1 = messageArg1;
         MessageArg2 = messageArg2;
         MessageArg3 = messageArg3;
+        MessageArg4 = messageArg4;
     }
 
     public DiagnosticDescriptor Descriptor { get; }
@@ -37,6 +41,7 @@ internal sealed record DiagnosticInfo
     public string? MessageArg1 { get; }
     public string? MessageArg2 { get; }
     public string? MessageArg3 { get; }
+    public string? MessageArg4 { get; }
 
     public Diagnostic CreateDiagnostic()
     {
@@ -45,7 +50,8 @@ internal sealed record DiagnosticInfo
             Location?.ToLocation(),
             MessageArg1,
             MessageArg2,
-            MessageArg3
+            MessageArg3,
+            MessageArg4
         );
         return diagnostic;
     }

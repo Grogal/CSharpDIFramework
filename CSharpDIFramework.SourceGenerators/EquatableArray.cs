@@ -9,7 +9,7 @@ namespace CSharpDIFramework.SourceGenerators;
 ///     An immutable, equatable array. This is equivalent to <see cref="Array" /> but with value equality support.
 /// </summary>
 /// <typeparam name="T">The type of values in the array.</typeparam>
-internal readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IEnumerable<T>
+public readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IEnumerable<T>
     where T : IEquatable<T>
 {
     public static readonly EquatableArray<T> Empty = new(Array.Empty<T>());
