@@ -1,6 +1,6 @@
 namespace CSharpDIFramework;
 
-[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, Inherited = false, AllowMultiple = true)]
 public class SingletonAttribute : Attribute
 {
     /// <summary>
@@ -27,7 +27,7 @@ public class SingletonAttribute : Attribute
     public Type ImplementationType { get; }
 }
 
-[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, Inherited = false, AllowMultiple = true)]
 public class TransientAttribute : Attribute
 {
     public TransientAttribute(Type serviceType, Type implementationType)
@@ -46,7 +46,7 @@ public class TransientAttribute : Attribute
     public Type ImplementationType { get; }
 }
 
-[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, Inherited = false, AllowMultiple = true)]
 public class ScopedAttribute : Attribute
 {
     public ScopedAttribute(Type serviceType, Type implementationType)
@@ -65,7 +65,7 @@ public class ScopedAttribute : Attribute
     public Type ImplementationType { get; }
 }
 
-[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, Inherited = false, AllowMultiple = true)]
 public class DecorateAttribute : Attribute
 {
     public DecorateAttribute(Type serviceType, Type implementationType)

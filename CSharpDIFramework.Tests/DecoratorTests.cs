@@ -63,4 +63,35 @@ public class DecoratorTests
 
         await Assert.That(service!.UsedCtor).IsEqualTo("Inject");
     }
+
+    [Test]
+    public async Task WhenMultipleDecoratorsAreRegistered_TheyAreAppliedInOrder()
+    {
+        // Arrange
+        var container = new DecoratorOrderContainer();
+
+        // Act
+        var service = container.Resolve<IOrderedService>();
+        string result = service.ApplyOrder();
+
+        // Assert
+        // Expected chain: new DecoratorB(new DecoratorA(new BaseService()))
+        await Assert.That(result).IsEqualTo("Base-A-B");
+    }
+
+    [Test]
+    public async Task WhenDecoratingModuleService_AllDecoratorsAreAppliedInOrder()
+    {
+        // Arrange
+        var container = new CombinedDecoratorContainer();
+
+        // Act
+        var service = container.Resolve<IOrderedService>();
+        string result = service.ApplyOrder();
+
+        // Assert
+        // The parser will process Module attributes first, then Container attributes.
+        // Expected chain: new DecoratorB(new DecoratorA(new BaseService()))
+        await Assert.That(result).IsEqualTo("Base-A-B");
+    }
 }

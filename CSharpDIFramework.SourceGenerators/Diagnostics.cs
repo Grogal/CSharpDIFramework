@@ -132,8 +132,16 @@ internal static class Diagnostics
     );
 
     public static readonly DiagnosticDescriptor DuplicateDecoratorRegistration = new(
-        "NDI0016", "Duplicate decorator registration",
+        "NDI0016",
+        "Duplicate decorator registration",
         "The decorator '{0}' is already registered for service '{1}'. Applying the same decorator multiple times is not allowed.", "CSharpDIFramework.Usage",
         DiagnosticSeverity.Error, true
+    );
+
+    public static readonly DiagnosticDescriptor ImportedTypeNotAModule = new(
+        "NDI0017",
+        "Imported type is not a module",
+        "The type '{0}' is not a valid module because it is not marked with the [RegisterModule] attribute",
+        "CSharpDIFramework.Usage", DiagnosticSeverity.Error, true
     );
 }

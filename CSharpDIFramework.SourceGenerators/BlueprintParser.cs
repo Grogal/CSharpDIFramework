@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -10,6 +11,12 @@ namespace CSharpDIFramework.SourceGenerators;
 internal static class BlueprintParser
 {
     private static INamedTypeSymbol s_disposableInterface = null!;
+    private static INamedTypeSymbol s_importModuleAttribute = null!;
+    private static INamedTypeSymbol s_decorateAttribute = null!;
+    private static INamedTypeSymbol s_registerModuleAttribute = null!;
+    private static INamedTypeSymbol s_singletonAttribute = null!;
+    private static INamedTypeSymbol s_scopedAttribute = null!;
+    private static INamedTypeSymbol s_transientAttribute = null!;
 
     public static (ServiceProviderDescription? Blueprint, ImmutableArray<Diagnostic> Diagnostics) Parse(GeneratorAttributeSyntaxContext context)
     {
@@ -19,22 +26,95 @@ internal static class BlueprintParser
             return (null, ImmutableArray<Diagnostic>.Empty);
         }
 
-        Compilation compilation = context.SemanticModel.Compilation;
-        s_disposableInterface = compilation.GetTypeByMetadataName("System.IDisposable")!;
-
         var diagnostics = new List<Diagnostic>();
-        var registrationMap = new Dictionary<ITypeSymbol, ServiceRegistration>(SymbolEqualityComparer.Default);
 
-        Diagnostic? diagnostic = BlueprintValidator.ValidateContainerIsPartial(classNode, classSymbol);
-        if (diagnostic is not null)
+        Diagnostic? partialDiagnostic = BlueprintValidator.ValidateContainerIsPartial(classNode, classSymbol);
+        if (partialDiagnostic is not null)
         {
-            diagnostics.Add(diagnostic);
+            diagnostics.Add(partialDiagnostic);
             return (null, diagnostics.ToImmutableArray());
         }
 
-        foreach (AttributeData? attributeData in classSymbol.GetAttributes())
+        Compilation compilation = context.SemanticModel.Compilation;
+        s_disposableInterface = compilation.GetTypeByMetadataName("System.IDisposable")!;
+        s_importModuleAttribute = compilation.GetTypeByMetadataName(Constants.ImportModuleAttributeName)!;
+        s_decorateAttribute = compilation.GetTypeByMetadataName(Constants.DecorateAttributeName)!;
+        s_registerModuleAttribute = compilation.GetTypeByMetadataName(Constants.RegisterModuleAttributeName)!;
+        s_singletonAttribute = compilation.GetTypeByMetadataName(Constants.SingletonAttributeName)!;
+        s_scopedAttribute = compilation.GetTypeByMetadataName(Constants.ScopedAttributeName)!;
+        s_transientAttribute = compilation.GetTypeByMetadataName(Constants.TransientAttributeName)!;
+
+        var registrationMap = new Dictionary<ITypeSymbol, ServiceRegistration>(SymbolEqualityComparer.Default);
+        ParseAttributesFromType(
+            classSymbol, registrationMap, diagnostics, compilation,
+            new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default)
+        );
+
+        var description = new ServiceProviderDescription(
+            classSymbol,
+            registrationMap.Values.ToImmutableArray(),
+            classNode.Identifier.GetLocation()
+        );
+
+        return (description, diagnostics.ToImmutableArray());
+    }
+
+    private static void ParseAttributesFromType(
+        INamedTypeSymbol typeSymbol,
+        Dictionary<ITypeSymbol, ServiceRegistration> registrationMap,
+        List<Diagnostic> diagnostics,
+        Compilation compilation,
+        HashSet<INamedTypeSymbol> visitedModules)
+    {
+        // Try to add the module to the set. If it's already there, we've found a cycle.
+        if (!visitedModules.Add(typeSymbol))
         {
-            if (attributeData.AttributeClass?.ToDisplayString() == Constants.DecorateAttributeName)
+            return;
+        }
+
+        foreach (AttributeData? attributeData in typeSymbol.GetAttributes())
+        {
+            INamedTypeSymbol? attributeClassSymbol = attributeData.AttributeClass;
+            if (attributeClassSymbol is null)
+            {
+                continue;
+            }
+
+            if (SymbolEqualityComparer.Default.Equals(attributeClassSymbol, s_importModuleAttribute))
+            {
+                if (attributeData.ConstructorArguments.Length == 1 &&
+                    attributeData.ConstructorArguments[0].Value is INamedTypeSymbol moduleType)
+                {
+                    if (moduleType.GetAttributes()
+                                  .Any(a =>
+                                           SymbolEqualityComparer.Default.Equals(a.AttributeClass, s_registerModuleAttribute)
+                                  ))
+                    {
+                        ParseAttributesFromType(moduleType, registrationMap, diagnostics, compilation, visitedModules);
+                    }
+                    else
+                    {
+                        diagnostics.Add(
+                            Diagnostic.Create(
+                                Diagnostics.ImportedTypeNotAModule,
+                                attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
+                                moduleType.ToDisplayString()
+                            )
+                        );
+                    }
+                }
+                else
+                {
+                    diagnostics.Add(
+                        Diagnostic.Create(
+                            Diagnostics.IncorrectAttribute,
+                            attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
+                            attributeData.AttributeClass?.Name
+                        )
+                    );
+                }
+            }
+            else if (SymbolEqualityComparer.Default.Equals(attributeClassSymbol, s_decorateAttribute))
             {
                 ParseDecoratorAttribute(attributeData, registrationMap, diagnostics, compilation);
             }
@@ -47,7 +127,9 @@ internal static class BlueprintParser
                     {
                         diagnostics.Add(
                             Diagnostic.Create(
-                                Diagnostics.DuplicateRegistrationConstructors, registration.RegistrationLocation, registration.ServiceType.ToDisplayString()
+                                Diagnostics.DuplicateRegistrationConstructors,
+                                registration.RegistrationLocation,
+                                registration.ServiceType.ToDisplayString()
                             )
                         );
                     }
@@ -59,13 +141,7 @@ internal static class BlueprintParser
             }
         }
 
-        var description = new ServiceProviderDescription(
-            classSymbol,
-            registrationMap.Values.ToImmutableArray(),
-            classNode.Identifier.GetLocation()
-        );
-
-        return (description, diagnostics.ToImmutableArray());
+        visitedModules.Remove(typeSymbol);
     }
 
     private static void ParseDecoratorAttribute(
@@ -142,22 +218,24 @@ internal static class BlueprintParser
         List<Diagnostic> diagnostics,
         Compilation compilation)
     {
-        string? attributeName = attributeData.AttributeClass?.ToDisplayString();
+        INamedTypeSymbol? attributeClassSymbol = attributeData.AttributeClass;
         ServiceLifetime lifetime;
 
-        switch (attributeName)
+        if (SymbolEqualityComparer.Default.Equals(attributeClassSymbol, s_singletonAttribute))
         {
-            case Constants.SingletonAttributeName:
-                lifetime = ServiceLifetime.Singleton;
-                break;
-            case Constants.TransientAttributeName:
-                lifetime = ServiceLifetime.Transient;
-                break;
-            case Constants.ScopedAttributeName:
-                lifetime = ServiceLifetime.Scoped;
-                break;
-            default:
-                return null;
+            lifetime = ServiceLifetime.Singleton;
+        }
+        else if (SymbolEqualityComparer.Default.Equals(attributeClassSymbol, s_scopedAttribute))
+        {
+            lifetime = ServiceLifetime.Scoped;
+        }
+        else if (SymbolEqualityComparer.Default.Equals(attributeClassSymbol, s_transientAttribute))
+        {
+            lifetime = ServiceLifetime.Transient;
+        }
+        else
+        {
+            return null;
         }
 
         (ITypeSymbol? serviceType, INamedTypeSymbol? implementationType) =

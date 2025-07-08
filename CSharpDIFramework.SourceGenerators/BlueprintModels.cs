@@ -14,6 +14,8 @@ public static class Constants
     public const string ScopedAttributeName = "CSharpDIFramework.ScopedAttribute";
     public const string InjectAttributeName = "CSharpDIFramework.InjectAttribute";
     public const string DecorateAttributeName = "CSharpDIFramework.DecorateAttribute";
+    public const string RegisterModuleAttributeName = "CSharpDIFramework.RegisterModuleAttribute";
+    public const string ImportModuleAttributeName = "CSharpDIFramework.ImportModuleAttribute";
 }
 
 public enum ServiceLifetime

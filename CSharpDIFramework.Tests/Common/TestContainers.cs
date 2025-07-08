@@ -72,3 +72,75 @@ public partial class DecoratorDisposalContainer { }
 [Decorate(typeof(IGreetingService), typeof(DecoratorWithInjectCtor))]
 [Singleton(typeof(ILogger), typeof(StringBuilderLogger))] // Needed for the greedier ctor
 public partial class DecoratorInjectCtorContainer { }
+
+[RegisterModule]
+[Singleton(typeof(ILogger), typeof(ConsoleLogger))]
+public interface ILoggingModule { }
+
+[RegisterContainer]
+[ImportModule(typeof(ILoggingModule))]
+[Transient(typeof(IAppService), typeof(AppService))]
+public partial class ModularContainer { }
+
+[RegisterModule]
+[Singleton(typeof(ILogger), typeof(ModuleLogger))]
+public interface ISharedLoggingModule { }
+
+[RegisterContainer]
+[ImportModule(typeof(ISharedLoggingModule))]
+[Transient(typeof(INotificationService), typeof(NotificationService))]
+public partial class ContainerWithModuleDependency { }
+
+[RegisterModule]
+[Singleton(typeof(IMessageService), typeof(HelloMessageService))] // Base service in module
+public interface IMessageModule { }
+
+[RegisterContainer]
+[ImportModule(typeof(IMessageModule))]
+[Decorate(typeof(IMessageService), typeof(WorldMessageDecorator))] // Decorator in container
+public partial class ContainerDecoratingModuleService { }
+
+[RegisterModule]
+[Singleton(typeof(IConfigService), typeof(ConfigService))]
+public interface IBaseModule { }
+
+[RegisterModule]
+[ImportModule(typeof(IBaseModule))] // This module imports the base one
+[Singleton(typeof(ILogger), typeof(ModuleLogger))]
+public interface IChainedLoggingModule { }
+
+[RegisterContainer]
+[ImportModule(typeof(IChainedLoggingModule))] // Container imports the chained module
+public partial class NestedModuleContainer { }
+
+[RegisterModule]
+[ImportModule(typeof(ICyclicModuleB))]
+[Singleton(typeof(ISingletonService), typeof(SingletonService))]
+public interface ICyclicModuleA { }
+
+[RegisterModule]
+[ImportModule(typeof(ICyclicModuleA))]
+[Scoped(typeof(IScopedService), typeof(ScopedService))]
+public interface ICyclicModuleB { }
+
+[RegisterContainer]
+[ImportModule(typeof(ICyclicModuleA))] // Import one of the cyclic modules
+public partial class CyclicModuleContainer { }
+
+[RegisterContainer]
+[Singleton(typeof(IOrderedService), typeof(BaseService))]
+[Decorate(typeof(IOrderedService), typeof(DecoratorA))] // Applied first
+[Decorate(typeof(IOrderedService), typeof(DecoratorB))] // Applied second (should be outermost)
+public partial class DecoratorOrderContainer { }
+
+// Module provides the base service and the first decorator
+[RegisterModule]
+[Singleton(typeof(IOrderedService), typeof(BaseService))]
+[Decorate(typeof(IOrderedService), typeof(DecoratorA))]
+public interface IPartialDecoratedModule { }
+
+// Container imports the module and adds another decorator
+[RegisterContainer]
+[ImportModule(typeof(IPartialDecoratedModule))]
+[Decorate(typeof(IOrderedService), typeof(DecoratorB))]
+public partial class CombinedDecoratorContainer { }

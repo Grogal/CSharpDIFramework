@@ -342,3 +342,140 @@ public class DecoratorWithInjectCtor : IGreetingService
 
     #endregion
 }
+
+public class ConsoleLogger : ILogger
+{
+    #region ILogger Implementation
+
+    public void Log(string message) { }
+
+    #endregion
+}
+
+// Define another service
+public interface IAppService { }
+
+public class AppService : IAppService
+{
+    public AppService(ILogger logger) { }
+}
+
+public class ModuleLogger : ILogger
+{
+    #region ILogger Implementation
+
+    public void Log(string message) { }
+
+    #endregion
+}
+
+public interface INotificationService
+{
+    void Send();
+}
+
+public class NotificationService : INotificationService
+{
+    public NotificationService(ILogger logger) { }
+
+    #region INotificationService Implementation
+
+    public void Send() { }
+
+    #endregion
+}
+
+public interface IMessageService
+{
+    string GetMessage();
+}
+
+public class HelloMessageService : IMessageService
+{
+    #region IMessageService Implementation
+
+    public string GetMessage()
+    {
+        return "Hello";
+    }
+
+    #endregion
+}
+
+public class WorldMessageDecorator : IMessageService
+{
+    private readonly IMessageService _inner;
+
+    public WorldMessageDecorator(IMessageService inner)
+    {
+        _inner = inner;
+    }
+
+    #region IMessageService Implementation
+
+    public string GetMessage()
+    {
+        return $"{_inner.GetMessage()} World";
+    }
+
+    #endregion
+}
+
+public interface IConfigService { }
+
+public class ConfigService : IConfigService { }
+
+public interface IOrderedService
+{
+    string ApplyOrder();
+}
+
+public class BaseService : IOrderedService
+{
+    #region IOrderedService Implementation
+
+    public string ApplyOrder()
+    {
+        return "Base";
+    }
+
+    #endregion
+}
+
+public class DecoratorA : IOrderedService
+{
+    private readonly IOrderedService _inner;
+
+    public DecoratorA(IOrderedService inner)
+    {
+        _inner = inner;
+    }
+
+    #region IOrderedService Implementation
+
+    public string ApplyOrder()
+    {
+        return $"{_inner.ApplyOrder()}-A";
+    }
+
+    #endregion
+}
+
+public class DecoratorB : IOrderedService
+{
+    private readonly IOrderedService _inner;
+
+    public DecoratorB(IOrderedService inner)
+    {
+        _inner = inner;
+    }
+
+    #region IOrderedService Implementation
+
+    public string ApplyOrder()
+    {
+        return $"{_inner.ApplyOrder()}-B";
+    }
+
+    #endregion
+}

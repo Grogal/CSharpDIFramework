@@ -108,6 +108,20 @@ public class ReusableDecorator : IDuplicateDecoratedService
     public ReusableDecorator(IDuplicateDecoratedService inner) { }
 }
 
+public interface ILongLivedService { }
+public class LongLivedService : ILongLivedService { }
+
+public interface IShortLivedService { } // Will be registered as Scoped
+public class ShortLivedService : IShortLivedService { }
+
+// This decorator is the problem. It decorates a Singleton but needs a Scoped service.
+public class CaptiveDecorator : ILongLivedService
+{
+    private readonly ILongLivedService _inner;
+    public CaptiveDecorator(ILongLivedService inner, IShortLivedService scoped) { }
+}
+
+
 [RegisterContainer]
 [Singleton(typeof(ISingletonServiceA), typeof(SingletonServiceA))]
 [Scoped(typeof(IScopedServiceA), typeof(ScopedServiceA))]
@@ -154,5 +168,11 @@ public partial class S8 { }
 [Decorate(typeof(IDuplicateDecoratedService), typeof(ReusableDecorator))]
 [Decorate(typeof(IDuplicateDecoratedService), typeof(ReusableDecorator))]
 public partial class S9 { }
+
+[RegisterContainer]
+[Singleton(typeof(ILongLivedService), typeof(LongLivedService))]
+[Scoped(typeof(IShortLivedService), typeof(ShortLivedService))]
+[Decorate(typeof(ILongLivedService), typeof(CaptiveDecorator))] // <-- Error here
+public partial class DecoratorCaptiveDependencyContainer { }
 
 #endif
