@@ -102,4 +102,38 @@ internal static class Diagnostics
         DiagnosticSeverity.Error, // This is severe enough to be an error.
         true
     );
+
+    public static readonly DiagnosticDescriptor DecoratorForUnregisteredService = new(
+        "NDI0012",
+        "Decorator for unregistered service",
+        "Cannot apply decorator '{0}' because the service '{1}' has not been registered",
+        "CSharpDIFramework.Usage", DiagnosticSeverity.Error, true
+    );
+
+    public static readonly DiagnosticDescriptor AmbiguousDecoratorConstructors = new(
+        "NDI0013",
+        "Ambiguous decorator constructors",
+        "The decorator '{0}' has multiple candidate constructors with {1} parameters. Please use the [Inject] attribute to specify which one to use.",
+        "CSharpDIFramework.Usage", DiagnosticSeverity.Error, true
+    );
+
+    public static readonly DiagnosticDescriptor DecoratorMissingDecoratedServiceParameter = new(
+        "NDI0014",
+        "Decorator missing required parameter",
+        "The decorator '{0}' must have a public constructor with exactly one parameter of the decorated service type '{1}'", "CSharpDIFramework.Usage",
+        DiagnosticSeverity.Error, true
+    );
+
+    public static readonly DiagnosticDescriptor DecoratorCaptiveDependency = new(
+        "NDI0015",
+        "Decorator has captive dependency",
+        "The decorator '{0}', which inherits a '{1}' lifetime from its service, cannot depend on service '{2}' with a shorter '{3}' lifetime",
+        "CSharpDIFramework.Usage", DiagnosticSeverity.Error, true
+    );
+
+    public static readonly DiagnosticDescriptor DuplicateDecoratorRegistration = new(
+        "NDI0016", "Duplicate decorator registration",
+        "The decorator '{0}' is already registered for service '{1}'. Applying the same decorator multiple times is not allowed.", "CSharpDIFramework.Usage",
+        DiagnosticSeverity.Error, true
+    );
 }

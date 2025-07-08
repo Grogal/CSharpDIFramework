@@ -6,7 +6,7 @@
 // ReSharper disable UnusedTypeParameter
 
 #pragma warning disable CS9113 // Parameter is unread.
-#if true
+#if false
 namespace CSharpDIFramework.Tests;
 
 // --- SCENARIO 1: Simple Two-Service Cycle ---
@@ -236,18 +236,19 @@ public partial class S7 { }
 //
 // public partial class S10 { }
 //
-// [RegisterContainer]
-// [Singleton(typeof(ICycleIntroducer), typeof(CycleIntroducer))]
-// public partial class S11 { }
+[RegisterContainer]
+[Singleton(typeof(ICycleIntroducer), typeof(CycleIntroducer))]
+public partial class S11 { }
+
 //
 // public partial class S12 { }
 //
 [RegisterContainer]
 [Singleton(typeof(IServiceThatStartsTheCycle), typeof(ServiceThatStartsTheCycle))]
 public partial class S13 { }
-//
-// [RegisterContainer]
-// [Singleton(typeof(ICycleBreakerA), typeof(CycleBreakerA))]
-// [Singleton(typeof(ICycleBreakerB), typeof(CycleBreakerB))]
-// public partial class S14 { }
+
+[RegisterContainer]
+[Singleton(typeof(ICycleBreakerA), typeof(CycleBreakerA))]
+[Singleton(typeof(ICycleBreakerB), typeof(CycleBreakerB))]
+public partial class S14 { }
 #endif

@@ -9,6 +9,8 @@ namespace CSharpDIFramework.SourceGenerators;
 
 internal static class BlueprintParser
 {
+    private static INamedTypeSymbol s_disposableInterface = null!;
+
     public static (ServiceProviderDescription? Blueprint, ImmutableArray<Diagnostic> Diagnostics) Parse(GeneratorAttributeSyntaxContext context)
     {
         if (context.TargetNode is not ClassDeclarationSyntax classNode ||
@@ -18,8 +20,10 @@ internal static class BlueprintParser
         }
 
         Compilation compilation = context.SemanticModel.Compilation;
+        s_disposableInterface = compilation.GetTypeByMetadataName("System.IDisposable")!;
+
         var diagnostics = new List<Diagnostic>();
-        var registrations = new List<ServiceRegistration>();
+        var registrationMap = new Dictionary<ITypeSymbol, ServiceRegistration>(SymbolEqualityComparer.Default);
 
         Diagnostic? diagnostic = BlueprintValidator.ValidateContainerIsPartial(classNode, classSymbol);
         if (diagnostic is not null)
@@ -28,22 +32,109 @@ internal static class BlueprintParser
             return (null, diagnostics.ToImmutableArray());
         }
 
-        foreach (AttributeData attributeData in classSymbol.GetAttributes())
+        foreach (AttributeData? attributeData in classSymbol.GetAttributes())
         {
-            ServiceRegistration? registration = ParseRegistrationAttribute(attributeData, diagnostics, compilation);
-            if (registration != null)
+            if (attributeData.AttributeClass?.ToDisplayString() == Constants.DecorateAttributeName)
             {
-                registrations.Add(registration);
+                ParseDecoratorAttribute(attributeData, registrationMap, diagnostics, compilation);
+            }
+            else
+            {
+                ServiceRegistration? registration = ParseRegistrationAttribute(attributeData, diagnostics, compilation);
+                if (registration != null)
+                {
+                    if (registrationMap.ContainsKey(registration.ServiceType))
+                    {
+                        diagnostics.Add(
+                            Diagnostic.Create(
+                                Diagnostics.DuplicateRegistrationConstructors, registration.RegistrationLocation, registration.ServiceType.ToDisplayString()
+                            )
+                        );
+                    }
+                    else
+                    {
+                        registrationMap.Add(registration.ServiceType, registration);
+                    }
+                }
             }
         }
 
         var description = new ServiceProviderDescription(
             classSymbol,
-            registrations.ToImmutableArray(),
+            registrationMap.Values.ToImmutableArray(),
             classNode.Identifier.GetLocation()
         );
 
         return (description, diagnostics.ToImmutableArray());
+    }
+
+    private static void ParseDecoratorAttribute(
+        AttributeData attributeData,
+        Dictionary<ITypeSymbol, ServiceRegistration> registrationMap,
+        List<Diagnostic> diagnostics,
+        Compilation compilation)
+    {
+        (ITypeSymbol? serviceType, INamedTypeSymbol? decoratorType) =
+            ExtractServiceAndImplTypes(attributeData, diagnostics);
+
+        // If same than we get 1 parameter
+        if (serviceType is null || SymbolEqualityComparer.Default.Equals(decoratorType, serviceType))
+        {
+            return;
+        }
+
+        if (registrationMap.TryGetValue(serviceType, out ServiceRegistration? registrationToDecorate))
+        {
+            Conversion conversion = compilation.ClassifyConversion(decoratorType!, serviceType);
+            if (conversion is { IsImplicit: false, IsIdentity: false })
+            {
+                diagnostics.Add(
+                    Diagnostic.Create(
+                        Diagnostics.ImplementationNotAssignable,
+                        attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
+                        decoratorType!.ToDisplayString(),
+                        serviceType.ToDisplayString()
+                    )
+                );
+                return;
+            }
+
+            if (decoratorType!.IsAbstract)
+            {
+                diagnostics.Add(
+                    Diagnostic.Create(
+                        Diagnostics.ImplementationIsAbstract,
+                        attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
+                        decoratorType.ToDisplayString()
+                    )
+                );
+                return;
+            }
+
+            bool wasAdded = registrationToDecorate.DecoratorTypes.Add(decoratorType);
+            if (!wasAdded)
+            {
+                diagnostics.Add(
+                    Diagnostic.Create(
+                        Diagnostics.DuplicateDecoratorRegistration,
+                        attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
+                        decoratorType.Name,
+                        serviceType.Name
+                    )
+                );
+            }
+        }
+        else
+        {
+            diagnostics.Add(
+                Diagnostic.Create(
+                    Diagnostics.DecoratorForUnregisteredService,
+                    attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
+                    decoratorType!.Name,
+                    serviceType.Name
+                )
+            );
+        }
     }
 
     private static ServiceRegistration? ParseRegistrationAttribute(
@@ -59,7 +150,12 @@ internal static class BlueprintParser
             case Constants.SingletonAttributeName:
                 lifetime = ServiceLifetime.Singleton;
                 break;
-            // Add Transient/Scoped here later
+            case Constants.TransientAttributeName:
+                lifetime = ServiceLifetime.Transient;
+                break;
+            case Constants.ScopedAttributeName:
+                lifetime = ServiceLifetime.Scoped;
+                break;
             default:
                 return null;
         }
@@ -97,11 +193,14 @@ internal static class BlueprintParser
             return null;
         }
 
+        bool isDisposable = implementationType.AllInterfaces.Contains(s_disposableInterface);
+
         return new ServiceRegistration(
             serviceType,
             implementationType,
             lifetime,
-            attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation()
+            attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
+            isDisposable
         );
     }
 

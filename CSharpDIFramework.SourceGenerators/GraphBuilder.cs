@@ -55,7 +55,9 @@ internal class GraphBuilder
         var blueprint = new ContainerBlueprint(
             _description.ContainerSymbol,
             _description.ContainerSymbol.Name,
-            _description.ContainerSymbol.ContainingNamespace.IsGlobalNamespace ? null : _description.ContainerSymbol.ContainingNamespace.ToDisplayString(),
+            _description.ContainerSymbol.ContainingNamespace.IsGlobalNamespace
+                ? null
+                : _description.ContainerSymbol.ContainingNamespace.ToDisplayString(),
             _resolvedServices.Values.ToImmutableArray(),
             _description.DeclarationLocation,
             GetContainingTypeDeclarations(_description.ContainerSymbol)
@@ -109,41 +111,19 @@ internal class GraphBuilder
             return null;
         }
 
-        var dependencies = new List<ResolvedService>();
-        foreach (IParameterSymbol? parameter in constructor.Parameters)
+        List<ResolvedService> dependencies = ResolveParameters(constructor.Parameters, registration, path);
+
+        var resolvedDecorators = new List<ResolvedDecorator>();
+        foreach (INamedTypeSymbol? decoratorType in registration.DecoratorTypes)
         {
-            if (!_registrationMap.TryGetValue(parameter.Type, out ServiceRegistration? dependencyRegistration))
+            IMethodSymbol? decoratorConstructor = SelectDecoratorConstructor(decoratorType, registration.ServiceType);
+            if (decoratorConstructor is null)
             {
-                _diagnostics.Add(
-                    Diagnostic.Create(
-                        Diagnostics.ServiceNotRegistered,
-                        parameter.Locations.FirstOrDefault() ?? registration.RegistrationLocation,
-                        parameter.Type.Name,
-                        registration.ImplementationType.Name
-                    )
-                );
                 continue;
             }
 
-            if (registration.Lifetime > dependencyRegistration.Lifetime)
-            {
-                _diagnostics.Add(
-                    Diagnostic.Create(
-                        Diagnostics.LifestyleMismatch, // Your new descriptor
-                        parameter.Locations.FirstOrDefault() ?? registration.RegistrationLocation,
-                        registration.ServiceType.Name,
-                        registration.Lifetime,
-                        dependencyRegistration.ServiceType.Name,
-                        dependencyRegistration.Lifetime
-                    )
-                );
-            }
-
-            ResolvedService? dependency = ResolveService(dependencyRegistration, path);
-            if (dependency != null)
-            {
-                dependencies.Add(dependency);
-            }
+            List<ResolvedService> decoratorDependencies = ResolveParameters(decoratorConstructor.Parameters, registration, path, registration.ServiceType);
+            resolvedDecorators.Add(new ResolvedDecorator(decoratorType, decoratorConstructor, decoratorDependencies.ToImmutableArray()));
         }
 
         path.Pop();
@@ -153,9 +133,71 @@ internal class GraphBuilder
             return null;
         }
 
-        var resolvedService = new ResolvedService(registration, constructor, dependencies.ToImmutableArray());
+        var resolvedService = new ResolvedService(registration, constructor, dependencies.ToImmutableArray(), resolvedDecorators.ToImmutableArray());
         _resolvedServices[serviceType] = resolvedService;
         return resolvedService;
+    }
+
+    private List<ResolvedService> ResolveParameters(
+        ImmutableArray<IParameterSymbol> parameters,
+        ServiceRegistration parentRegistration,
+        Stack<ITypeSymbol> path,
+        ITypeSymbol? exclude = null)
+    {
+        var dependencies = new List<ResolvedService>();
+        foreach (IParameterSymbol? parameter in parameters)
+        {
+            if (exclude != null && SymbolEqualityComparer.Default.Equals(parameter.Type, exclude))
+            {
+                continue;
+            }
+
+            if (!_registrationMap.TryGetValue(parameter.Type, out ServiceRegistration? dependencyRegistration))
+            {
+                _diagnostics.Add(
+                    Diagnostic.Create(
+                        Diagnostics.ServiceNotRegistered,
+                        parameter.Locations.FirstOrDefault()
+                        ?? parentRegistration.RegistrationLocation, parameter.Type.Name,
+                        parentRegistration.ImplementationType.Name
+                    )
+                );
+                continue;
+            }
+
+            ServiceLifetime effectiveParentLifetime = parentRegistration.Lifetime;
+            if (effectiveParentLifetime > dependencyRegistration.Lifetime)
+            {
+                // This checks for both regular and decorator captive dependencies.
+                // We determine if this is a decorator by checking if the implementation type matches the service type.
+                bool isDecorator = !SymbolEqualityComparer.Default.Equals(
+                    parentRegistration.ImplementationType, parentRegistration.ServiceType
+                );
+
+                DiagnosticDescriptor descriptor = isDecorator
+                    ? Diagnostics.DecoratorCaptiveDependency
+                    : Diagnostics.LifestyleMismatch;
+
+                _diagnostics.Add(
+                    Diagnostic.Create(
+                        descriptor,
+                        parameter.Locations.FirstOrDefault() ?? parentRegistration.RegistrationLocation, parentRegistration.ImplementationType.Name,
+                        effectiveParentLifetime,
+                        dependencyRegistration.ServiceType.Name,
+                        dependencyRegistration.Lifetime
+                    )
+                );
+                continue;
+            }
+
+            ResolvedService? dependency = ResolveService(dependencyRegistration, path);
+            if (dependency != null)
+            {
+                dependencies.Add(dependency);
+            }
+        }
+
+        return dependencies;
     }
 
     private IMethodSymbol? SelectConstructor(INamedTypeSymbol implementationType)
@@ -171,7 +213,9 @@ internal class GraphBuilder
         {
             _diagnostics.Add(
                 Diagnostic.Create(
-                    Diagnostics.NoPublicConstructor, location, implementationType.ToDisplayString()
+                    Diagnostics.NoPublicConstructor,
+                    location,
+                    implementationType.ToDisplayString()
                 )
             );
             return null;
@@ -187,7 +231,9 @@ internal class GraphBuilder
         {
             _diagnostics.Add(
                 Diagnostic.Create(
-                    Diagnostics.MultipleInjectConstructors, location, implementationType.ToDisplayString()
+                    Diagnostics.MultipleInjectConstructors,
+                    location,
+                    implementationType.ToDisplayString()
                 )
             );
             return null;
@@ -211,6 +257,78 @@ internal class GraphBuilder
             _diagnostics.Add(
                 Diagnostic.Create(
                     Diagnostics.AmbiguousConstructors, location, implementationType.ToDisplayString(), maxParams
+                )
+            );
+            return null;
+        }
+
+        return greediestConstructors[0];
+    }
+
+    private IMethodSymbol? SelectDecoratorConstructor(INamedTypeSymbol decoratorType, ITypeSymbol serviceToDecorate)
+    {
+        Location location = decoratorType.Locations.FirstOrDefault() ?? Location.None;
+        ImmutableArray<IMethodSymbol> candidates = decoratorType.Constructors
+                                                                .Where(c => c.DeclaredAccessibility == Accessibility.Public &&
+                                                                            c.Parameters.Count(p => SymbolEqualityComparer.Default.Equals(
+                                                                                                   p.Type, serviceToDecorate
+                                                                                               )
+                                                                            ) == 1
+                                                                )
+                                                                .ToImmutableArray();
+
+        if (candidates.IsEmpty)
+        {
+            _diagnostics.Add(
+                Diagnostic.Create(
+                    Diagnostics.DecoratorMissingDecoratedServiceParameter,
+                    location,
+                    decoratorType.Name,
+                    serviceToDecorate.Name
+                )
+            );
+            return null;
+        }
+
+        ImmutableArray<IMethodSymbol> injectConstructors = candidates.Where(c =>
+                                                                                c.GetAttributes()
+                                                                                 .Any(a =>
+                                                                                          a.AttributeClass?.ToDisplayString() == Constants.InjectAttributeName
+                                                                                 )
+                                                                     )
+                                                                     .ToImmutableArray();
+        if (injectConstructors.Length > 1)
+        {
+            _diagnostics.Add(
+                Diagnostic.Create(
+                    Diagnostics.MultipleInjectConstructors,
+                    location,
+                    decoratorType.ToDisplayString()
+                )
+            );
+            return null;
+        }
+
+        if (injectConstructors.Length == 1)
+        {
+            return injectConstructors[0];
+        }
+
+        if (candidates.Length == 1)
+        {
+            return candidates[0];
+        }
+
+        int maxParams = candidates.Max(c => c.Parameters.Length);
+        ImmutableArray<IMethodSymbol> greediestConstructors = candidates.Where(c => c.Parameters.Length == maxParams).ToImmutableArray();
+        if (greediestConstructors.Length > 1)
+        {
+            _diagnostics.Add(
+                Diagnostic.Create(
+                    Diagnostics.AmbiguousDecoratorConstructors,
+                    location,
+                    decoratorType.ToDisplayString(),
+                    maxParams
                 )
             );
             return null;

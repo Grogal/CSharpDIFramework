@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
 
@@ -10,8 +11,9 @@ public static class Constants
     public const string RegisterContainerAttributeName = "CSharpDIFramework.RegisterContainerAttribute";
     public const string SingletonAttributeName = "CSharpDIFramework.SingletonAttribute";
     public const string TransientAttributeName = "CSharpDIFramework.TransientAttribute";
-    public const string ScopeAttributeName = "CSharpDIFramework.ScopeAttribute";
+    public const string ScopedAttributeName = "CSharpDIFramework.ScopedAttribute";
     public const string InjectAttributeName = "CSharpDIFramework.InjectAttribute";
+    public const string DecorateAttributeName = "CSharpDIFramework.DecorateAttribute";
 }
 
 public enum ServiceLifetime
@@ -25,12 +27,16 @@ public record ServiceRegistration(
     ITypeSymbol ServiceType,
     INamedTypeSymbol ImplementationType,
     ServiceLifetime Lifetime,
-    Location RegistrationLocation)
+    Location RegistrationLocation,
+    bool IsDisposable)
 {
     public ITypeSymbol ServiceType { get; } = ServiceType;
     public INamedTypeSymbol ImplementationType { get; } = ImplementationType;
     public ServiceLifetime Lifetime { get; } = Lifetime;
     public Location RegistrationLocation { get; } = RegistrationLocation;
+    public bool IsDisposable { get; } = IsDisposable;
+
+    public HashSet<INamedTypeSymbol> DecoratorTypes { get; set; } = new(SymbolEqualityComparer.Default);
 }
 
 public record ServiceProviderDescription(
@@ -83,21 +89,36 @@ public record ServiceProviderDescription(
     }
 }
 
+public record ResolvedDecorator(
+    INamedTypeSymbol DecoratorType,
+    IMethodSymbol SelectedConstructor,
+    ImmutableArray<ResolvedService> Dependencies
+)
+{
+    public INamedTypeSymbol DecoratorType { get; } = DecoratorType;
+    public IMethodSymbol SelectedConstructor { get; } = SelectedConstructor;
+    public ImmutableArray<ResolvedService> Dependencies { get; } = Dependencies;
+}
+
 public record ResolvedService
 {
     public ResolvedService(
-        ServiceRegistration SourceRegistration,
-        IMethodSymbol SelectedConstructor,
-        ImmutableArray<ResolvedService> Dependencies)
+        ServiceRegistration sourceRegistration,
+        IMethodSymbol selectedConstructor,
+        ImmutableArray<ResolvedService> dependencies,
+        ImmutableArray<ResolvedDecorator> decorators)
     {
-        this.SourceRegistration = SourceRegistration;
-        this.SelectedConstructor = SelectedConstructor;
-        this.Dependencies = Dependencies;
+        SourceRegistration = sourceRegistration;
+        SelectedConstructor = selectedConstructor;
+        Dependencies = dependencies;
+        Decorators = decorators;
     }
 
     public ServiceRegistration SourceRegistration { get; }
     public IMethodSymbol SelectedConstructor { get; }
     public ImmutableArray<ResolvedService> Dependencies { get; }
+
+    public ImmutableArray<ResolvedDecorator> Decorators { get; }
 
     public ITypeSymbol ServiceType => SourceRegistration.ServiceType;
     public ServiceLifetime Lifetime => SourceRegistration.Lifetime;
