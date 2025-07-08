@@ -396,4 +396,42 @@ public partial class Container_ImportingClassModule { }
 
 #endregion
 
+#region NDI0005 and NDI0004 with Nullable Reference Types
+
+// =================================================================
+
+// --- SCENARIO 1: Missing Optional Dependency ---
+public interface IServiceWithMissingOptionalDep { }
+
+public class ServiceWithMissingOptionalDep : IServiceWithMissingOptionalDep
+{
+    // Even though this is marked as nullable, the DI container should still
+    // report an error if it's not registered, following a "fail-fast" policy.
+    public ServiceWithMissingOptionalDep(IUnregisteredOptionalDep? optionalDep) { }
+}
+
+public interface IUnregisteredOptionalDep { } // Never registered
+
+// EXPECT: NDI0005. The generator must not treat the nullable annotation '?'
+// as a reason to suppress the "Service not registered" error by injecting null.
+[RegisterContainer]
+[Singleton(typeof(IServiceWithMissingOptionalDep), typeof(ServiceWithMissingOptionalDep))]
+public partial class Container_MissingNullableDependency { }
+
+// --- SCENARIO 2: Cyclic Dependency with Nullable Parameter ---
+public interface ICyclicWithNullable { }
+
+public class CyclicWithNullable(ICyclicWithNullable? self) : ICyclicWithNullable
+{
+    // The '?' should not prevent the cycle detector from firing.
+    // A dependency on oneself is always a cycle, regardless of nullability.
+}
+
+// EXPECT: NDI0004. The cycle detector must operate on types and ignore nullability annotations.
+[RegisterContainer]
+[Singleton(typeof(ICyclicWithNullable), typeof(CyclicWithNullable))]
+public partial class Container_CyclicDependencyWithNullable { }
+
+#endregion
+
 #endif

@@ -399,6 +399,124 @@ public class WorldMessageDecorator(IMessageService inner) : IMessageService
     #endregion
 }
 
+// =================================================================
+// 6. Services for Closed Generic Tests
+// =================================================================
+
+// --- Entities for the generic repository ---
+public class User
+{
+    public Guid Id { get; set; }
+}
+
+public class Product
+{
+    public int Id { get; set; }
+}
+
+// --- Generic Service Interface ---
+public interface IRepository<T>
+{
+    T GetById(object id);
+}
+
+// --- Generic Service Implementation ---
+public class EfRepository<T> : IRepository<T>
+{
+    #region IRepository<T> Implementation
+
+    public T GetById(object id)
+    {
+        // Dummy implementation for testing
+        return default!;
+    }
+
+    #endregion
+}
+
+// --- Service that depends on a closed generic ---
+public interface IUserService
+{
+    IRepository<User> UserRepository { get; }
+}
+
+public class UserService(IRepository<User> userRepository) : IUserService
+{
+    #region IUserService Implementation
+
+    public IRepository<User> UserRepository { get; } = userRepository;
+
+    #endregion
+}
+
+// --- Decorator for a generic service ---
+public class AuditingRepositoryDecorator<T>(IRepository<T> inner, ILogger logger) : IRepository<T>
+{
+    #region IRepository<T> Implementation
+
+    public T GetById(object id)
+    {
+        logger.Log($"AUDIT: Getting {typeof(T).Name} with ID {id}");
+        return inner.GetById(id);
+    }
+
+    #endregion
+}
+
+// =================================================================
+// 7. Services for Nullable (Optional) Dependency Tests
+// =================================================================
+
+// An optional dependency that may or may not be registered.
+public interface IOptionalDependency { }
+
+public class OptionalDependency : IOptionalDependency { }
+
+// A service that declares its dependency as nullable.
+public interface IServiceWithOptionalDependency
+{
+    IOptionalDependency? InjectedDependency { get; }
+}
+
+public class ServiceWithOptionalDependency : IServiceWithOptionalDependency
+{
+    public ServiceWithOptionalDependency(IOptionalDependency? optionalDependency)
+    {
+        InjectedDependency = optionalDependency;
+    }
+
+    #region IServiceWithOptionalDependency Implementation
+
+    public IOptionalDependency? InjectedDependency { get; }
+
+    #endregion
+}
+
+// =================================================================
+// 8. Services for Advanced/Unsupported Scenarios
+// =================================================================
+
+// A concrete class used to test explicit null registrations.
+public class NullableConcreteService
+{
+    public string Message => "I am not null";
+}
+
+// A service that depends on the concrete nullable class.
+public interface IServiceWithConcreteNullableDep
+{
+    NullableConcreteService? InjectedService { get; }
+}
+
+public class ServiceWithConcreteNullableDep(NullableConcreteService? service) : IServiceWithConcreteNullableDep
+{
+    #region IServiceWithConcreteNullableDep Implementation
+
+    public NullableConcreteService? InjectedService { get; } = service;
+
+    #endregion
+}
+
 [RegisterModule]
 [Singleton(typeof(ILogger), typeof(StringBuilderLogger))]
 public interface ILoggingModule { }
