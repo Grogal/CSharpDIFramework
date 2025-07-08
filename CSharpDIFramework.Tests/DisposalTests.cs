@@ -1,6 +1,6 @@
 namespace CSharpDIFramework.Tests;
 
-public class DisposalTests
+public partial class DisposalTests
 {
     [Test]
     public async ValueTask ScopedDisposable_IsDisposed_WhenScopeEnds()
@@ -50,7 +50,7 @@ public class DisposalTests
         var container = new AllLifetimesDisposalContainer();
 
         var service = container.Resolve<ISingletonService>() as IDisposableService;
-        container.Dispose(); // Assuming the root container implements IDisposable
+        container.Dispose();
 
         await Assert.That(service!.IsDisposed).IsTrue();
     }
@@ -84,11 +84,23 @@ public class DisposalTests
 
         using (IContainerScope scope = container.CreateScope())
         {
-            repo = scope.Resolve<IRepository>() as DisposableRepository;
+            var resolvedRepo = scope.Resolve<IRepository>();
+            repo = resolvedRepo as DisposableRepository;
             uow = repo!.UnitOfWork as DisposableUnitOfWork;
         }
 
         await Assert.That(repo.IsDisposed).IsTrue();
         await Assert.That(uow!.IsDisposed).IsTrue();
     }
+
+    [RegisterContainer]
+    [Singleton(typeof(ISingletonService), typeof(DisposableSingleton))]
+    [Scoped(typeof(IScopedService), typeof(DisposableScoped))]
+    [Transient(typeof(ITransientService), typeof(DisposableTransient))]
+    public partial class AllLifetimesDisposalContainer { }
+
+    [RegisterContainer]
+    [Scoped(typeof(IUnitOfWork), typeof(DisposableUnitOfWork))]
+    [Transient(typeof(IRepository), typeof(DisposableRepository))]
+    public partial class NestedValidDisposalContainer { }
 }

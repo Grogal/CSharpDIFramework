@@ -1,6 +1,6 @@
 namespace CSharpDIFramework.Tests;
 
-public class ConstructorSelectionTests
+public partial class ConstructorSelectionTests
 {
     [Test]
     public async ValueTask WhenInjectAttributeIsPresent_UsesAttributedConstructor()
@@ -29,4 +29,15 @@ public class ConstructorSelectionTests
         // Assert
         await Assert.That(service.UsedCtor).IsEqualTo("Greediest");
     }
+
+    [RegisterContainer]
+    [Singleton(typeof(ISingletonService), typeof(SingletonService))]
+    [Scoped(typeof(IScopedService), typeof(ScopedService))]
+    [Transient(typeof(IServiceWithCtors), typeof(ServiceWithInjectCtor))]
+    public partial class InjectCtorContainer { }
+
+    [RegisterContainer]
+    [Singleton(typeof(ISingletonService), typeof(SingletonService))]
+    [Transient(typeof(IServiceWithCtors), typeof(ServiceWithGreedyCtor))]
+    public partial class GreedyCtorContainer { }
 }

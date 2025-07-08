@@ -2,7 +2,7 @@ using TUnit.Assertions.AssertConditions.Throws;
 
 namespace CSharpDIFramework.Tests;
 
-public class LifetimeTests
+public partial class LifetimeTests
 {
     [Test]
     public async ValueTask Singleton_IsResolvedAsSameInstance_FromRootAndScope()
@@ -95,4 +95,10 @@ public class LifetimeTests
         await Assert.That(() => container.Resolve<ITransientService>())
                     .Throws<InvalidOperationException>();
     }
+
+    [RegisterContainer]
+    [Singleton(typeof(ISingletonService), typeof(SingletonService))]
+    [Scoped(typeof(IScopedService), typeof(ScopedService))]
+    [Transient(typeof(ITransientService), typeof(TransientService))]
+    public partial class AllLifetimesContainer { }
 }

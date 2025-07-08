@@ -1,6 +1,6 @@
 namespace CSharpDIFramework.Tests;
 
-public class DecoratorTests
+public partial class DecoratorTests
 {
     [Test]
     public async Task DecoratedService_IsWrappedByDecorator()
@@ -43,15 +43,14 @@ public class DecoratorTests
     public async Task DisposableDecorator_IsDisposed_WhenScopeEnds()
     {
         var container = new DecoratorDisposalContainer();
-        IGreetingService service;
+        IDisposableService? service;
 
         using (IContainerScope scope = container.CreateScope())
         {
-            service = scope.Resolve<IGreetingService>();
+            service = scope.Resolve<IGreetingService>() as IDisposableService;
         }
 
-        var decorator = service as DisposableDecorator;
-        await Assert.That(decorator!.IsDisposed).IsTrue();
+        await Assert.That(service!.IsDisposed).IsTrue();
     }
 
     [Test]
@@ -94,4 +93,43 @@ public class DecoratorTests
         // Expected chain: new DecoratorB(new DecoratorA(new BaseService()))
         await Assert.That(result).IsEqualTo("Base-A-B");
     }
+
+    [RegisterContainer]
+    [Singleton(typeof(IGreetingService), typeof(GreetingService))]
+    [Decorate(typeof(IGreetingService), typeof(ExclamationDecorator))]
+    public partial class SimpleDecoratorContainer { }
+
+    [RegisterContainer]
+    [Singleton(typeof(IGreetingService), typeof(GreetingService))]
+    [Decorate(typeof(IGreetingService), typeof(ExclamationDecorator))] // Inner
+    [Decorate(typeof(IGreetingService), typeof(LoggingDecorator))] // Outer
+    [Singleton(typeof(ILogger), typeof(StringBuilderLogger))]
+    public partial class ChainedDecoratorContainer { }
+
+    [RegisterContainer]
+    [Transient(typeof(IGreetingService), typeof(GreetingService))] // Service is Transient
+    [Decorate(typeof(IGreetingService), typeof(ExclamationDecorator))]
+    public partial class DecoratorLifetimeContainer { }
+
+    [RegisterContainer]
+    [Scoped(typeof(IGreetingService), typeof(GreetingService))]
+    [Decorate(typeof(IGreetingService), typeof(DisposableDecorator))]
+    public partial class DecoratorDisposalContainer { }
+
+    [RegisterContainer]
+    [Singleton(typeof(IGreetingService), typeof(GreetingService))]
+    [Decorate(typeof(IGreetingService), typeof(DecoratorWithInjectCtor))]
+    [Singleton(typeof(ILogger), typeof(StringBuilderLogger))] // Needed for the greedier ctor
+    public partial class DecoratorInjectCtorContainer { }
+
+    [RegisterContainer]
+    [Singleton(typeof(IOrderedService), typeof(BaseOrderedService))]
+    [Decorate(typeof(IOrderedService), typeof(DecoratorA))] // Applied first
+    [Decorate(typeof(IOrderedService), typeof(DecoratorB))] // Applied second (outermost)
+    public partial class DecoratorOrderContainer { }
+
+    [RegisterContainer]
+    [ImportModule(typeof(IPartialDecoratedModule))]
+    [Decorate(typeof(IOrderedService), typeof(DecoratorB))] // Container adds the outer decorator
+    public partial class CombinedDecoratorContainer { }
 }

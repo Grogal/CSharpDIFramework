@@ -1,6 +1,6 @@
 namespace CSharpDIFramework.Tests;
 
-public class ModulesTests
+public partial class ModulesTests
 {
     [Test]
     public async Task WhenModuleIsImported_ServicesFromModuleAreResolvable()
@@ -61,4 +61,27 @@ public class ModulesTests
         await Assert.That(singleton).IsNotNull();
         await Assert.That(scoped).IsNotNull();
     }
+
+    [RegisterContainer]
+    [ImportModule(typeof(ILoggingModule))]
+    [Transient(typeof(IAppService), typeof(AppService))]
+    public partial class ModularContainer { }
+
+    [RegisterContainer]
+    [ImportModule(typeof(ILoggingModule))]
+    [Transient(typeof(INotificationService), typeof(NotificationService))]
+    public partial class ContainerWithModuleDependency { }
+
+    [RegisterContainer]
+    [ImportModule(typeof(IMessageModule))]
+    [Decorate(typeof(IMessageService), typeof(WorldMessageDecorator))] // Decorator in container
+    public partial class ContainerDecoratingModuleService { }
+
+    [RegisterContainer]
+    [ImportModule(typeof(IChainedModule))] // Container imports the module that imports other modules
+    public partial class NestedModuleContainer { }
+
+    [RegisterContainer]
+    [ImportModule(typeof(ICyclicModuleA))] // Import one of the cyclic modules
+    public partial class CyclicModuleContainer { }
 }

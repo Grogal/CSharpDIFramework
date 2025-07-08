@@ -2,32 +2,99 @@ using System.Text;
 
 namespace CSharpDIFramework.Tests;
 
-// --- Interfaces ---
+// A single file containing all reusable services and modules for testing.
+
+// =================================================================
+// 1. Basic Service Interfaces & Implementations
+// =================================================================
+
 public interface ISingletonService { }
+
+public class SingletonService : ISingletonService { }
 
 public interface IScopedService { }
 
+public class ScopedService : IScopedService { }
+
 public interface ITransientService { }
 
-public interface IEmptyService { }
-
-public interface IDisposableService : IDisposable
-{
-    bool IsDisposed { get; }
-}
+public class TransientService : ITransientService { }
 
 public interface IServiceWithDependency
 {
     ISingletonService Singleton { get; }
 }
 
-public class SingletonService : ISingletonService { }
+public class ServiceWithDependency(ISingletonService singleton) : IServiceWithDependency
+{
+    #region IServiceWithDependency Implementation
 
-public class ScopedService : IScopedService { }
+    public ISingletonService Singleton { get; } = singleton;
 
-public class TransientService : ITransientService { }
+    #endregion
+}
 
-public class EmptyService : IEmptyService { }
+// =================================================================
+// 2. Services for Constructor Selection Tests
+// =================================================================
+
+public interface IServiceWithCtors
+{
+    string UsedCtor { get; }
+}
+
+public class ServiceWithInjectCtor : IServiceWithCtors
+{
+    public ServiceWithInjectCtor()
+    {
+        UsedCtor = "Parameterless";
+    }
+
+    [Inject]
+    public ServiceWithInjectCtor(ISingletonService s)
+    {
+        UsedCtor = "Inject";
+    }
+
+    public ServiceWithInjectCtor(ISingletonService s, IScopedService sc)
+    {
+        UsedCtor = "Greediest";
+    }
+
+    #region IServiceWithCtors Implementation
+
+    public string UsedCtor { get; }
+
+    #endregion
+}
+
+public class ServiceWithGreedyCtor : IServiceWithCtors
+{
+    public ServiceWithGreedyCtor()
+    {
+        UsedCtor = "Parameterless";
+    }
+
+    public ServiceWithGreedyCtor(ISingletonService s)
+    {
+        UsedCtor = "Greediest";
+    }
+
+    #region IServiceWithCtors Implementation
+
+    public string UsedCtor { get; }
+
+    #endregion
+}
+
+// =================================================================
+// 3. Disposable Services
+// =================================================================
+
+public interface IDisposableService : IDisposable
+{
+    bool IsDisposed { get; }
+}
 
 public class DisposableSingleton : ISingletonService, IDisposableService
 {
@@ -83,88 +150,6 @@ public class DisposableTransient : ITransientService, IDisposableService
     #endregion
 }
 
-public class DisposableService : IDisposableService
-{
-    #region IDisposable Implementation
-
-    public void Dispose()
-    {
-        IsDisposed = true;
-    }
-
-    #endregion
-
-    #region IDisposableService Implementation
-
-    public bool IsDisposed { get; private set; }
-
-    #endregion
-}
-
-public class ServiceWithDependency(ISingletonService singleton) : IServiceWithDependency
-{
-    #region IServiceWithDependency Implementation
-
-    public ISingletonService Singleton { get; } = singleton;
-
-    #endregion
-}
-
-public class ScopedDependsOnTransient(ITransientService transient) { }
-
-public class SingletonDependsOnScoped(IScopedService scoped) { }
-
-public class SingletonDependsOnTransient(ITransientService transient) { }
-
-public interface IServiceWithCtors
-{
-    string UsedCtor { get; }
-}
-
-public class ServiceWithInjectCtor : IServiceWithCtors
-{
-    public ServiceWithInjectCtor()
-    {
-        UsedCtor = "Parameterless";
-    }
-
-    [Inject]
-    public ServiceWithInjectCtor(ISingletonService s)
-    {
-        UsedCtor = "Inject";
-    }
-
-    public ServiceWithInjectCtor(ISingletonService s, IScopedService sc)
-    {
-        UsedCtor = "Greediest";
-    }
-
-    #region IServiceWithCtors Implementation
-
-    public string UsedCtor { get; }
-
-    #endregion
-}
-
-public class ServiceWithGreedyCtor : IServiceWithCtors
-{
-    public ServiceWithGreedyCtor()
-    {
-        UsedCtor = "Parameterless";
-    }
-
-    public ServiceWithGreedyCtor(ISingletonService s)
-    {
-        UsedCtor = "Greediest";
-    }
-
-    #region IServiceWithCtors Implementation
-
-    public string UsedCtor { get; }
-
-    #endregion
-}
-
 public interface IUnitOfWork : IDisposable { }
 
 public class DisposableUnitOfWork : IUnitOfWork
@@ -181,18 +166,13 @@ public class DisposableUnitOfWork : IUnitOfWork
     #endregion
 }
 
-public interface IRepository : IDisposable { }
-
-public class DisposableRepository : IRepository
+public interface IRepository
 {
-    public DisposableRepository(IUnitOfWork uow)
-    {
-        UnitOfWork = uow;
-    }
+    IUnitOfWork UnitOfWork { get; }
+}
 
-    public bool IsDisposed { get; private set; }
-    public IUnitOfWork UnitOfWork { get; }
-
+public class DisposableRepository(IUnitOfWork uow) : IRepository, IDisposableService
+{
     #region IDisposable Implementation
 
     public void Dispose()
@@ -201,7 +181,23 @@ public class DisposableRepository : IRepository
     }
 
     #endregion
+
+    #region IDisposableService Implementation
+
+    public bool IsDisposed { get; private set; }
+
+    #endregion
+
+    #region IRepository Implementation
+
+    public IUnitOfWork UnitOfWork { get; } = uow;
+
+    #endregion
 }
+
+// =================================================================
+// 4. Services and Decorators for Decorator Pattern Tests
+// =================================================================
 
 public interface ILogger
 {
@@ -240,60 +236,33 @@ public class GreetingService : IGreetingService
     #endregion
 }
 
-public class ExclamationDecorator : IGreetingService
+public class ExclamationDecorator(IGreetingService inner) : IGreetingService
 {
-    private readonly IGreetingService _inner;
-
-    public ExclamationDecorator(IGreetingService inner)
-    {
-        _inner = inner;
-    }
-
     #region IGreetingService Implementation
 
     public string Greet()
     {
-        return $"{_inner.Greet()}!";
+        return $"{inner.Greet()}!";
     }
 
     #endregion
 }
 
-// A decorator that has its own dependency (ILogger).
-public class LoggingDecorator : IGreetingService
+public class LoggingDecorator(IGreetingService inner, ILogger logger) : IGreetingService
 {
-    private readonly IGreetingService _inner;
-    private readonly ILogger _logger;
-
-    public LoggingDecorator(IGreetingService inner, ILogger logger)
-    {
-        _inner = inner;
-        _logger = logger;
-    }
-
     #region IGreetingService Implementation
 
     public string Greet()
     {
-        _logger.Log("Greeting...");
-        return _inner.Greet();
+        logger.Log("Greeting...");
+        return inner.Greet();
     }
 
     #endregion
 }
 
-// A disposable decorator to test the disposal chain.
-public class DisposableDecorator : IGreetingService, IDisposable
+public class DisposableDecorator(IGreetingService inner) : IGreetingService, IDisposableService
 {
-    private readonly IGreetingService _inner;
-
-    public DisposableDecorator(IGreetingService inner)
-    {
-        _inner = inner;
-    }
-
-    public bool IsDisposed { get; private set; }
-
     #region IDisposable Implementation
 
     public void Dispose()
@@ -303,31 +272,32 @@ public class DisposableDecorator : IGreetingService, IDisposable
 
     #endregion
 
+    #region IDisposableService Implementation
+
+    public bool IsDisposed { get; private set; }
+
+    #endregion
+
     #region IGreetingService Implementation
 
     public string Greet()
     {
-        return _inner.Greet();
+        return inner.Greet();
     }
 
     #endregion
 }
 
-// A decorator with multiple constructors to test [Inject] selection.
 public class DecoratorWithInjectCtor : IGreetingService
 {
-    private readonly IGreetingService _inner;
-
     public DecoratorWithInjectCtor(IGreetingService inner, ILogger logger)
     {
-        _inner = inner;
         UsedCtor = "Greediest";
     }
 
     [Inject]
     public DecoratorWithInjectCtor(IGreetingService inner)
     {
-        _inner = inner;
         UsedCtor = "Inject";
     }
 
@@ -337,53 +307,68 @@ public class DecoratorWithInjectCtor : IGreetingService
 
     public string Greet()
     {
-        return _inner.Greet();
+        return "Decorated";
     }
 
     #endregion
 }
 
-public class ConsoleLogger : ILogger
+public interface IOrderedService
 {
-    #region ILogger Implementation
+    string ApplyOrder();
+}
 
-    public void Log(string message) { }
+public class BaseOrderedService : IOrderedService
+{
+    #region IOrderedService Implementation
+
+    public string ApplyOrder()
+    {
+        return "Base";
+    }
 
     #endregion
 }
 
-// Define another service
+public class DecoratorA(IOrderedService inner) : IOrderedService
+{
+    #region IOrderedService Implementation
+
+    public string ApplyOrder()
+    {
+        return $"{inner.ApplyOrder()}-A";
+    }
+
+    #endregion
+}
+
+public class DecoratorB(IOrderedService inner) : IOrderedService
+{
+    #region IOrderedService Implementation
+
+    public string ApplyOrder()
+    {
+        return $"{inner.ApplyOrder()}-B";
+    }
+
+    #endregion
+}
+
+// =================================================================
+// 5. Services and Modules for Module Tests
+// =================================================================
+
 public interface IAppService { }
 
-public class AppService : IAppService
-{
-    public AppService(ILogger logger) { }
-}
+public class AppService(ILogger logger) : IAppService { }
 
-public class ModuleLogger : ILogger
-{
-    #region ILogger Implementation
+public interface INotificationService { }
 
-    public void Log(string message) { }
+public class NotificationService(ILogger logger) : INotificationService { }
 
-    #endregion
-}
+public interface IConfigService { }
 
-public interface INotificationService
-{
-    void Send();
-}
-
-public class NotificationService : INotificationService
-{
-    public NotificationService(ILogger logger) { }
-
-    #region INotificationService Implementation
-
-    public void Send() { }
-
-    #endregion
-}
+public class ConfigService : IConfigService { }
 
 public interface IMessageService
 {
@@ -402,80 +387,46 @@ public class HelloMessageService : IMessageService
     #endregion
 }
 
-public class WorldMessageDecorator : IMessageService
+public class WorldMessageDecorator(IMessageService inner) : IMessageService
 {
-    private readonly IMessageService _inner;
-
-    public WorldMessageDecorator(IMessageService inner)
-    {
-        _inner = inner;
-    }
-
     #region IMessageService Implementation
 
     public string GetMessage()
     {
-        return $"{_inner.GetMessage()} World";
+        return $"{inner.GetMessage()} World";
     }
 
     #endregion
 }
 
-public interface IConfigService { }
+[RegisterModule]
+[Singleton(typeof(ILogger), typeof(StringBuilderLogger))]
+public interface ILoggingModule { }
 
-public class ConfigService : IConfigService { }
+[RegisterModule]
+[Singleton(typeof(IConfigService), typeof(ConfigService))]
+public interface IConfigModule { }
 
-public interface IOrderedService
-{
-    string ApplyOrder();
-}
+[RegisterModule]
+[ImportModule(typeof(IConfigModule))]
+[ImportModule(typeof(ILoggingModule))]
+public interface IChainedModule { }
 
-public class BaseService : IOrderedService
-{
-    #region IOrderedService Implementation
+[RegisterModule]
+[ImportModule(typeof(ICyclicModuleB))]
+[Singleton(typeof(ISingletonService), typeof(SingletonService))]
+public interface ICyclicModuleA { }
 
-    public string ApplyOrder()
-    {
-        return "Base";
-    }
+[RegisterModule]
+[ImportModule(typeof(ICyclicModuleA))]
+[Scoped(typeof(IScopedService), typeof(ScopedService))]
+public interface ICyclicModuleB { }
 
-    #endregion
-}
+[RegisterModule]
+[Singleton(typeof(IOrderedService), typeof(BaseOrderedService))]
+[Decorate(typeof(IOrderedService), typeof(DecoratorA))]
+public interface IPartialDecoratedModule { }
 
-public class DecoratorA : IOrderedService
-{
-    private readonly IOrderedService _inner;
-
-    public DecoratorA(IOrderedService inner)
-    {
-        _inner = inner;
-    }
-
-    #region IOrderedService Implementation
-
-    public string ApplyOrder()
-    {
-        return $"{_inner.ApplyOrder()}-A";
-    }
-
-    #endregion
-}
-
-public class DecoratorB : IOrderedService
-{
-    private readonly IOrderedService _inner;
-
-    public DecoratorB(IOrderedService inner)
-    {
-        _inner = inner;
-    }
-
-    #region IOrderedService Implementation
-
-    public string ApplyOrder()
-    {
-        return $"{_inner.ApplyOrder()}-B";
-    }
-
-    #endregion
-}
+[RegisterModule]
+[Singleton(typeof(IMessageService), typeof(HelloMessageService))]
+public interface IMessageModule { }
