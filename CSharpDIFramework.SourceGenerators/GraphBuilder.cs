@@ -8,10 +8,15 @@ namespace CSharpDIFramework.SourceGenerators;
 
 internal class GraphBuilder
 {
+    private static readonly SymbolDisplayFormat s_fullyQualifiedFormat = SymbolDisplayFormat.FullyQualifiedFormat
+                                                                                            .WithGlobalNamespaceStyle(
+                                                                                                SymbolDisplayGlobalNamespaceStyle.Included
+                                                                                            );
+
     private readonly ServiceProviderDescription _description;
     private readonly List<Diagnostic> _diagnostics = new();
-    private readonly Dictionary<ITypeSymbol, ServiceRegistration> _registrationMap = new(SymbolEqualityComparer.Default);
-    private readonly Dictionary<ITypeSymbol, ResolvedService> _resolvedServices = new(SymbolEqualityComparer.Default);
+    private readonly Dictionary<string, ServiceRegistration> _registrationMap = new();
+    private readonly Dictionary<string, ResolvedService> _resolvedServices = new();
 
     public GraphBuilder(ServiceProviderDescription description)
     {
@@ -20,17 +25,19 @@ internal class GraphBuilder
         // build cache of registrations
         foreach (ServiceRegistration? reg in description.Registrations)
         {
-            if (_registrationMap.ContainsKey(reg.ServiceType))
+            if (_registrationMap.ContainsKey(reg.ServiceTypeFullName))
             {
                 _diagnostics.Add(
                     Diagnostic.Create(
-                        Diagnostics.DuplicateRegistrationConstructors, reg.RegistrationLocation, reg.ServiceType.ToDisplayString()
+                        Diagnostics.DuplicateRegistrationConstructors,
+                        reg.RegistrationLocation?.ToLocation(),
+                        reg.ServiceTypeFullName
                     )
                 );
             }
             else
             {
-                _registrationMap.Add(reg.ServiceType, reg);
+                _registrationMap.Add(reg.ServiceTypeFullName, reg);
             }
         }
     }
@@ -44,7 +51,7 @@ internal class GraphBuilder
 
         foreach (ServiceRegistration? registration in _description.Registrations)
         {
-            ResolveService(registration, new Stack<ITypeSymbol>());
+            ResolveService(registration, new Stack<string>());
         }
 
         if (_diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
@@ -79,9 +86,9 @@ internal class GraphBuilder
         return declarations.ToImmutableArray();
     }
 
-    private ResolvedService? ResolveService(ServiceRegistration registration, Stack<ITypeSymbol> path)
+    private ResolvedService? ResolveService(ServiceRegistration registration, Stack<string> path)
     {
-        ITypeSymbol serviceType = registration.ServiceType;
+        string serviceType = registration.ServiceTypeFullName;
 
         if (_resolvedServices.TryGetValue(serviceType, out ResolvedService? cached))
         {
@@ -89,13 +96,16 @@ internal class GraphBuilder
         }
 
         // --- Cycle Detection ---
-        if (path.Contains(serviceType, SymbolEqualityComparer.Default))
+        if (path.Contains(serviceType))
         {
             // Reverse as it Stack
-            string cyclePath = string.Join(" -> ", path.Reverse().Select(s => s.Name)) + $" -> {serviceType.Name}";
+            string cyclePath = string.Join(" -> ", path.Reverse().Select(s => s)) + $" -> {serviceType}";
             _diagnostics.Add(
                 Diagnostic.Create(
-                    Diagnostics.CyclicDependency, _registrationMap[path.Peek()].RegistrationLocation, path.Peek().Name, cyclePath
+                    Diagnostics.CyclicDependency,
+                    _registrationMap[path.Peek()].RegistrationLocation?.ToLocation(),
+                    path.Peek(),
+                    cyclePath
                 )
             );
             return null;
@@ -116,13 +126,15 @@ internal class GraphBuilder
         var resolvedDecorators = new List<ResolvedDecorator>();
         foreach (INamedTypeSymbol? decoratorType in registration.DecoratorTypes)
         {
-            IMethodSymbol? decoratorConstructor = SelectDecoratorConstructor(decoratorType, registration.ServiceType);
+            IMethodSymbol? decoratorConstructor = SelectDecoratorConstructor(decoratorType, registration.ServiceTypeFullName);
             if (decoratorConstructor is null)
             {
                 continue;
             }
 
-            List<ResolvedService> decoratorDependencies = ResolveParameters(decoratorConstructor.Parameters, registration, path, registration.ServiceType);
+            List<ResolvedService> decoratorDependencies = ResolveParameters(
+                decoratorConstructor.Parameters, registration, path, registration.ServiceTypeFullName
+            );
             resolvedDecorators.Add(new ResolvedDecorator(decoratorType, decoratorConstructor, decoratorDependencies.ToImmutableArray()));
         }
 
@@ -141,24 +153,25 @@ internal class GraphBuilder
     private List<ResolvedService> ResolveParameters(
         ImmutableArray<IParameterSymbol> parameters,
         ServiceRegistration parentRegistration,
-        Stack<ITypeSymbol> path,
-        ITypeSymbol? exclude = null)
+        Stack<string> path,
+        string? exclude = null)
     {
         var dependencies = new List<ResolvedService>();
         foreach (IParameterSymbol? parameter in parameters)
         {
-            if (exclude != null && SymbolEqualityComparer.Default.Equals(parameter.Type, exclude))
+            if (exclude != null && parameter.Type.ToDisplayString(s_fullyQualifiedFormat) == exclude)
             {
                 continue;
             }
 
-            if (!_registrationMap.TryGetValue(parameter.Type, out ServiceRegistration? dependencyRegistration))
+            if (!_registrationMap.TryGetValue(parameter.Type.ToDisplayString(s_fullyQualifiedFormat), out ServiceRegistration? dependencyRegistration))
             {
                 _diagnostics.Add(
                     Diagnostic.Create(
                         Diagnostics.ServiceNotRegistered,
                         parameter.Locations.FirstOrDefault()
-                        ?? parentRegistration.RegistrationLocation, parameter.Type.Name,
+                        ?? parentRegistration.RegistrationLocation?.ToLocation(),
+                        parameter.Type.Name,
                         parentRegistration.ImplementationType.Name
                     )
                 );
@@ -170,9 +183,8 @@ internal class GraphBuilder
             {
                 // This checks for both regular and decorator captive dependencies.
                 // We determine if this is a decorator by checking if the implementation type matches the service type.
-                bool isDecorator = !SymbolEqualityComparer.Default.Equals(
-                    parentRegistration.ImplementationType, parentRegistration.ServiceType
-                );
+                bool isDecorator = parentRegistration.ImplementationType
+                                                     .ToDisplayString(s_fullyQualifiedFormat) != parentRegistration.ServiceTypeFullName;
 
                 DiagnosticDescriptor descriptor = isDecorator
                     ? Diagnostics.DecoratorCaptiveDependency
@@ -181,9 +193,11 @@ internal class GraphBuilder
                 _diagnostics.Add(
                     Diagnostic.Create(
                         descriptor,
-                        parameter.Locations.FirstOrDefault() ?? parentRegistration.RegistrationLocation, parentRegistration.ImplementationType.Name,
+                        parameter.Locations.FirstOrDefault()
+                        ?? parentRegistration.RegistrationLocation?.ToLocation(),
+                        parentRegistration.ImplementationType.Name,
                         effectiveParentLifetime,
-                        dependencyRegistration.ServiceType.Name,
+                        dependencyRegistration.ServiceTypeFullName,
                         dependencyRegistration.Lifetime
                     )
                 );
@@ -265,14 +279,14 @@ internal class GraphBuilder
         return greediestConstructors[0];
     }
 
-    private IMethodSymbol? SelectDecoratorConstructor(INamedTypeSymbol decoratorType, ITypeSymbol serviceToDecorate)
+    private IMethodSymbol? SelectDecoratorConstructor(INamedTypeSymbol decoratorType, string serviceToDecorate)
     {
         Location location = decoratorType.Locations.FirstOrDefault() ?? Location.None;
         ImmutableArray<IMethodSymbol> candidates = decoratorType.Constructors
                                                                 .Where(c => c.DeclaredAccessibility == Accessibility.Public &&
-                                                                            c.Parameters.Count(p => SymbolEqualityComparer.Default.Equals(
-                                                                                                   p.Type, serviceToDecorate
-                                                                                               )
+                                                                            c.Parameters.Count(p =>
+                                                                                                   p.Type.ToDisplayString(s_fullyQualifiedFormat) ==
+                                                                                                   serviceToDecorate
                                                                             ) == 1
                                                                 )
                                                                 .ToImmutableArray();
@@ -284,7 +298,7 @@ internal class GraphBuilder
                     Diagnostics.DecoratorMissingDecoratedServiceParameter,
                     location,
                     decoratorType.Name,
-                    serviceToDecorate.Name
+                    s_fullyQualifiedFormat
                 )
             );
             return null;

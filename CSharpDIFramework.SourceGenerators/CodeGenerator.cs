@@ -69,7 +69,7 @@ internal static class CodeGenerator
     {
         ImmutableArray<string> containingDecls = GraphBuilder.GetContainingTypeDeclarations(containerSymbol);
         string? ns = containerSymbol.ContainingNamespace.IsGlobalNamespace ? null : containerSymbol.ContainingNamespace.ToDisplayString();
-        var dummyBlueprint = new ContainerBlueprint(containerSymbol, containerName, ns, ImmutableArray<ResolvedService>.Empty, Location.None, containingDecls);
+        var dummyBlueprint = new ContainerBlueprint(containerSymbol, containerName, ns, ImmutableArray<ResolvedService>.Empty, null, containingDecls);
         return GenerateDummyContainer(dummyBlueprint);
     }
 
@@ -115,8 +115,8 @@ internal static class CodeGenerator
         var indent = new string(' ', indentLevel * 4);
         foreach (ResolvedService s in singletons)
         {
-            string serviceType = s.ServiceType.ToDisplayString(s_fullyQualifiedFormat);
-            sb.AppendLine($"{indent}private readonly global::System.Lazy<{serviceType}> {GetSingletonFieldName(s.ServiceType)};");
+            string serviceType = s.ServiceTypeFullName;
+            sb.AppendLine($"{indent}private readonly global::System.Lazy<{serviceType}> {GetSingletonFieldName(s.ServiceTypeFullName)};");
         }
 
         sb.AppendLine();
@@ -132,10 +132,10 @@ internal static class CodeGenerator
 
         foreach (ResolvedService s in singletons)
         {
-            string serviceType = s.ServiceType.ToDisplayString(s_fullyQualifiedFormat);
+            string serviceType = s.ServiceTypeFullName;
 
             sb.AppendLine(
-                $"{innerIndent}{GetSingletonFieldName(s.ServiceType)} = new global::System.Lazy<{serviceType}>(() => {GetFactoryMethodName(s.ServiceType)}());"
+                $"{innerIndent}{GetSingletonFieldName(s.ServiceTypeFullName)} = new global::System.Lazy<{serviceType}>(() => {GetFactoryMethodName(s.ServiceTypeFullName)}());"
             );
         }
 
@@ -150,10 +150,9 @@ internal static class CodeGenerator
 
         foreach (ResolvedService service in singletons)
         {
-            string serviceType = service.ServiceType.ToDisplayString(s_fullyQualifiedFormat);
-            string implType = service.SourceRegistration.ImplementationType.ToDisplayString(s_fullyQualifiedFormat);
+            string serviceType = service.ServiceTypeFullName;
 
-            sb.AppendLine($"{indent}private {serviceType} {GetFactoryMethodName(service.ServiceType)}()");
+            sb.AppendLine($"{indent}private {serviceType} {GetFactoryMethodName(service.ServiceTypeFullName)}()");
             sb.AppendLine($"{indent}{{");
 
             sb.AppendLine($"{innerIndent}return {GenerateInstanceCreation(service, "this")};");
@@ -178,23 +177,23 @@ internal static class CodeGenerator
             string ifPrefix = isFirst ? "if" : "else if";
             isFirst = false;
 
-            string serviceType = service.ServiceType.ToDisplayString(s_fullyQualifiedFormat);
+            string serviceType = service.ServiceTypeFullName;
             sb.AppendLine($"{innerIndent}{ifPrefix} (typeof(T) == typeof({serviceType}))");
             sb.AppendLine($"{innerIndent}{{");
 
             switch (service.Lifetime)
             {
                 case ServiceLifetime.Singleton:
-                    sb.AppendLine($"{doubleIndent}return (T)(object){GetSingletonFieldName(service.ServiceType)}.Value;");
+                    sb.AppendLine($"{doubleIndent}return (T)(object){GetSingletonFieldName(service.ServiceTypeFullName)}.Value;");
                     break;
                 case ServiceLifetime.Transient:
                     sb.AppendLine(
-                        $"{doubleIndent}throw new global::System.InvalidOperationException($\"Service '{service.ServiceType.ToDisplayString()}' has a Transient lifetime and cannot be resolved from the root container. Please create and resolve from a scope.\");"
+                        $"{doubleIndent}throw new global::System.InvalidOperationException($\"Service '{service.ServiceTypeFullName}' has a Transient lifetime and cannot be resolved from the root container. Please create and resolve from a scope.\");"
                     );
                     break;
                 case ServiceLifetime.Scoped:
                     sb.AppendLine(
-                        $"{doubleIndent}throw new global::System.InvalidOperationException($\"Service '{service.ServiceType.ToDisplayString()}' has a {service.Lifetime} lifetime and cannot be resolved from the root container. Please create and resolve from a scope.\");"
+                        $"{doubleIndent}throw new global::System.InvalidOperationException($\"Service '{service.ServiceTypeFullName}' has a {service.Lifetime} lifetime and cannot be resolved from the root container. Please create and resolve from a scope.\");"
                     );
                     break;
             }
@@ -244,7 +243,7 @@ internal static class CodeGenerator
             string ifPrefix = isFirst ? "if" : "else if";
             isFirst = false;
 
-            string serviceType = service.ServiceType.ToDisplayString(s_fullyQualifiedFormat);
+            string serviceType = service.ServiceTypeFullName;
             sb.AppendLine($"{doubleIndent}{ifPrefix} (typeof(T) == typeof({serviceType}))");
             sb.AppendLine($"{doubleIndent}{{");
 
@@ -307,7 +306,7 @@ internal static class CodeGenerator
             );
         foreach (ResolvedService? service in disposableSingletons)
         {
-            string fieldName = GetSingletonFieldName(service.ServiceType);
+            string fieldName = GetSingletonFieldName(service.ServiceTypeFullName);
 
             sb.AppendLine($"{innerIndent}if ({fieldName}.IsValueCreated)");
             sb.AppendLine($"{innerIndent}{{");
@@ -321,19 +320,23 @@ internal static class CodeGenerator
 
     // --- Helper Methods for Naming ---
 
-    private static string SanitizeTypeName(ITypeSymbol typeSymbol)
+    private static string SanitizeTypeName(string typeName)
     {
         // This replaces characters that are invalid in an identifier with underscores.
-        // e.g., "My.Generic<System.Int32>" becomes "My_Generic_System_Int32_"
-        return typeSymbol.ToDisplayString().Replace(".", "_").Replace("<", "_").Replace(">", "_").Replace(",", "_");
+        // e.g., "global::My.Generic<System.Int32>" becomes "global__My_Generic_System_Int32_"
+        return typeName.Replace("::", "__")
+                       .Replace(".", "_")
+                       .Replace("<", "_")
+                       .Replace(">", "_")
+                       .Replace(",", "_");
     }
 
-    private static string GetSingletonFieldName(ITypeSymbol serviceType)
+    private static string GetSingletonFieldName(string serviceType)
     {
         return $"_singleton_{SanitizeTypeName(serviceType)}";
     }
 
-    private static string GetFactoryMethodName(ITypeSymbol serviceType)
+    private static string GetFactoryMethodName(string serviceType)
     {
         return $"Create_{SanitizeTypeName(serviceType)}";
     }
@@ -342,7 +345,7 @@ internal static class CodeGenerator
     {
         string baseImplType = service.SourceRegistration.ImplementationType.ToDisplayString(s_fullyQualifiedFormat);
         IEnumerable<string> baseArgs =
-            service.Dependencies.Select(d => $"{resolverContext}.Resolve<{d.ServiceType.ToDisplayString(s_fullyQualifiedFormat)}>()");
+            service.Dependencies.Select(d => $"{resolverContext}.Resolve<{d.ServiceTypeFullName}>()");
         var currentCall = $"new {baseImplType}({string.Join(", ", baseArgs)})";
 
         foreach (ResolvedDecorator? decorator in service.Decorators)
@@ -351,7 +354,7 @@ internal static class CodeGenerator
             var decoratorArgs = new List<string>();
             foreach (IParameterSymbol? param in decorator.SelectedConstructor.Parameters)
             {
-                if (SymbolEqualityComparer.Default.Equals(param.Type, service.ServiceType))
+                if (param.Type.ToDisplayString(s_fullyQualifiedFormat) == service.ServiceTypeFullName)
                 {
                     decoratorArgs.Add(currentCall);
                 }

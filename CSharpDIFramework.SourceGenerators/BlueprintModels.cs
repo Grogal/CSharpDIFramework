@@ -26,16 +26,16 @@ public enum ServiceLifetime
 }
 
 public record ServiceRegistration(
-    ITypeSymbol ServiceType,
+    string ServiceTypeFullName,
     INamedTypeSymbol ImplementationType,
     ServiceLifetime Lifetime,
-    Location RegistrationLocation,
+    LocationInfo? RegistrationLocation,
     bool IsDisposable)
 {
-    public ITypeSymbol ServiceType { get; } = ServiceType;
+    public string ServiceTypeFullName { get; } = ServiceTypeFullName;
     public INamedTypeSymbol ImplementationType { get; } = ImplementationType;
     public ServiceLifetime Lifetime { get; } = Lifetime;
-    public Location RegistrationLocation { get; } = RegistrationLocation;
+    public LocationInfo? RegistrationLocation { get; } = RegistrationLocation;
     public bool IsDisposable { get; } = IsDisposable;
 
     public HashSet<INamedTypeSymbol> DecoratorTypes { get; set; } = new(SymbolEqualityComparer.Default);
@@ -44,11 +44,11 @@ public record ServiceRegistration(
 public record ServiceProviderDescription(
     INamedTypeSymbol ContainerSymbol,
     ImmutableArray<ServiceRegistration> Registrations,
-    Location DeclarationLocation)
+    LocationInfo? DeclarationLocation)
 {
     public INamedTypeSymbol ContainerSymbol { get; } = ContainerSymbol;
     public ImmutableArray<ServiceRegistration> Registrations { get; } = Registrations;
-    public Location DeclarationLocation { get; } = DeclarationLocation;
+    public LocationInfo? DeclarationLocation { get; } = DeclarationLocation;
 
     public override string ToString()
     {
@@ -68,7 +68,7 @@ public record ServiceProviderDescription(
             {
                 ServiceRegistration registration = Registrations[i];
                 builder.AppendLine(
-                    $"// [{i + 1}] {registration.Lifetime} - [Service]{registration.ServiceType.ToDisplayString()} -> [ResolveTo]{registration.ImplementationType.ToDisplayString()}"
+                    $"// [{i + 1}] {registration.Lifetime} - [Service]{registration.ServiceTypeFullName} -> [ResolveTo]{registration.ImplementationType.ToDisplayString()}"
                 );
             }
         }
@@ -122,7 +122,7 @@ public record ResolvedService
 
     public ImmutableArray<ResolvedDecorator> Decorators { get; }
 
-    public ITypeSymbol ServiceType => SourceRegistration.ServiceType;
+    public string ServiceTypeFullName => SourceRegistration.ServiceTypeFullName;
     public ServiceLifetime Lifetime => SourceRegistration.Lifetime;
 }
 
@@ -131,7 +131,7 @@ public record ContainerBlueprint(
     string ContainerName,
     string? Namespace,
     ImmutableArray<ResolvedService> Services, // Changed from Registrations
-    Location DeclarationLocation,
+    LocationInfo? DeclarationLocation,
     ImmutableArray<string> ContainingTypeDeclarations
 )
 {
@@ -140,16 +140,7 @@ public record ContainerBlueprint(
     public string? Namespace { get; } = Namespace;
     public ImmutableArray<ResolvedService> Services { get; } = Services;
 
-    public Location DeclarationLocation { get; } = DeclarationLocation;
+    public LocationInfo? DeclarationLocation { get; } = DeclarationLocation;
 
     public ImmutableArray<string> ContainingTypeDeclarations { get; } = ContainingTypeDeclarations;
-}
-
-public record ValidationResult(
-    ImmutableArray<ContainerBlueprint> Blueprints,
-    ImmutableArray<Diagnostic> Diagnostics
-)
-{
-    public ImmutableArray<ContainerBlueprint> Blueprints { get; } = Blueprints;
-    public ImmutableArray<Diagnostic> Diagnostics { get; } = Diagnostics;
 }

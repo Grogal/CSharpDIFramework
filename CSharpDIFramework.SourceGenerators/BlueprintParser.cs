@@ -18,21 +18,26 @@ internal static class BlueprintParser
     private static INamedTypeSymbol s_scopedAttribute = null!;
     private static INamedTypeSymbol s_transientAttribute = null!;
 
-    public static (ServiceProviderDescription? Blueprint, ImmutableArray<Diagnostic> Diagnostics) Parse(GeneratorAttributeSyntaxContext context)
+    private static readonly SymbolDisplayFormat s_fullyQualifiedFormat = SymbolDisplayFormat.FullyQualifiedFormat
+                                                                                            .WithGlobalNamespaceStyle(
+                                                                                                SymbolDisplayGlobalNamespaceStyle.Included
+                                                                                            );
+
+    public static (ServiceProviderDescription? Blueprint, EquatableArray<DiagnosticInfo> Diagnostics) Parse(GeneratorAttributeSyntaxContext context)
     {
         if (context.TargetNode is not ClassDeclarationSyntax classNode ||
             context.TargetSymbol is not INamedTypeSymbol classSymbol)
         {
-            return (null, ImmutableArray<Diagnostic>.Empty);
+            return (null, EquatableArray<DiagnosticInfo>.Empty);
         }
 
-        var diagnostics = new List<Diagnostic>();
+        var diagnostics = new List<DiagnosticInfo>();
 
-        Diagnostic? partialDiagnostic = BlueprintValidator.ValidateContainerIsPartial(classNode, classSymbol);
+        DiagnosticInfo? partialDiagnostic = BlueprintValidator.ValidateContainerIsPartial(classNode, classSymbol);
         if (partialDiagnostic is not null)
         {
             diagnostics.Add(partialDiagnostic);
-            return (null, diagnostics.ToImmutableArray());
+            return (null, new EquatableArray<DiagnosticInfo>(diagnostics));
         }
 
         Compilation compilation = context.SemanticModel.Compilation;
@@ -44,7 +49,7 @@ internal static class BlueprintParser
         s_scopedAttribute = compilation.GetTypeByMetadataName(Constants.ScopedAttributeName)!;
         s_transientAttribute = compilation.GetTypeByMetadataName(Constants.TransientAttributeName)!;
 
-        var registrationMap = new Dictionary<ITypeSymbol, ServiceRegistration>(SymbolEqualityComparer.Default);
+        var registrationMap = new Dictionary<string, ServiceRegistration>();
         ParseAttributesFromType(
             classSymbol, registrationMap, diagnostics, compilation,
             new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default)
@@ -53,16 +58,16 @@ internal static class BlueprintParser
         var description = new ServiceProviderDescription(
             classSymbol,
             registrationMap.Values.ToImmutableArray(),
-            classNode.Identifier.GetLocation()
+            LocationInfo.CreateFrom(classNode.Identifier.GetLocation())
         );
 
-        return (description, diagnostics.ToImmutableArray());
+        return (description, new EquatableArray<DiagnosticInfo>(diagnostics));
     }
 
     private static void ParseAttributesFromType(
         INamedTypeSymbol typeSymbol,
-        Dictionary<ITypeSymbol, ServiceRegistration> registrationMap,
-        List<Diagnostic> diagnostics,
+        Dictionary<string, ServiceRegistration> registrationMap,
+        List<DiagnosticInfo> diagnostics,
         Compilation compilation,
         HashSet<INamedTypeSymbol> visitedModules)
     {
@@ -95,7 +100,7 @@ internal static class BlueprintParser
                     else
                     {
                         diagnostics.Add(
-                            Diagnostic.Create(
+                            new DiagnosticInfo(
                                 Diagnostics.ImportedTypeNotAModule,
                                 attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                                 moduleType.ToDisplayString()
@@ -106,7 +111,7 @@ internal static class BlueprintParser
                 else
                 {
                     diagnostics.Add(
-                        Diagnostic.Create(
+                        new DiagnosticInfo(
                             Diagnostics.IncorrectAttribute,
                             attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                             attributeData.AttributeClass?.Name
@@ -123,19 +128,19 @@ internal static class BlueprintParser
                 ServiceRegistration? registration = ParseRegistrationAttribute(attributeData, diagnostics, compilation);
                 if (registration != null)
                 {
-                    if (registrationMap.ContainsKey(registration.ServiceType))
+                    if (registrationMap.ContainsKey(registration.ServiceTypeFullName))
                     {
                         diagnostics.Add(
-                            Diagnostic.Create(
+                            new DiagnosticInfo(
                                 Diagnostics.DuplicateRegistrationConstructors,
                                 registration.RegistrationLocation,
-                                registration.ServiceType.ToDisplayString()
+                                registration.ServiceTypeFullName
                             )
                         );
                     }
                     else
                     {
-                        registrationMap.Add(registration.ServiceType, registration);
+                        registrationMap.Add(registration.ServiceTypeFullName, registration);
                     }
                 }
             }
@@ -146,8 +151,8 @@ internal static class BlueprintParser
 
     private static void ParseDecoratorAttribute(
         AttributeData attributeData,
-        Dictionary<ITypeSymbol, ServiceRegistration> registrationMap,
-        List<Diagnostic> diagnostics,
+        Dictionary<string, ServiceRegistration> registrationMap,
+        List<DiagnosticInfo> diagnostics,
         Compilation compilation)
     {
         (ITypeSymbol? serviceType, INamedTypeSymbol? decoratorType) =
@@ -159,13 +164,13 @@ internal static class BlueprintParser
             return;
         }
 
-        if (registrationMap.TryGetValue(serviceType, out ServiceRegistration? registrationToDecorate))
+        if (registrationMap.TryGetValue(serviceType.ToDisplayString(s_fullyQualifiedFormat), out ServiceRegistration? registrationToDecorate))
         {
             Conversion conversion = compilation.ClassifyConversion(decoratorType!, serviceType);
             if (conversion is { IsImplicit: false, IsIdentity: false })
             {
                 diagnostics.Add(
-                    Diagnostic.Create(
+                    new DiagnosticInfo(
                         Diagnostics.ImplementationNotAssignable,
                         attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                         decoratorType!.ToDisplayString(),
@@ -178,7 +183,7 @@ internal static class BlueprintParser
             if (decoratorType!.IsAbstract)
             {
                 diagnostics.Add(
-                    Diagnostic.Create(
+                    new DiagnosticInfo(
                         Diagnostics.ImplementationIsAbstract,
                         attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                         decoratorType.ToDisplayString()
@@ -191,7 +196,7 @@ internal static class BlueprintParser
             if (!wasAdded)
             {
                 diagnostics.Add(
-                    Diagnostic.Create(
+                    new DiagnosticInfo(
                         Diagnostics.DuplicateDecoratorRegistration,
                         attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                         decoratorType.Name,
@@ -203,7 +208,7 @@ internal static class BlueprintParser
         else
         {
             diagnostics.Add(
-                Diagnostic.Create(
+                new DiagnosticInfo(
                     Diagnostics.DecoratorForUnregisteredService,
                     attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                     decoratorType!.Name,
@@ -215,7 +220,7 @@ internal static class BlueprintParser
 
     private static ServiceRegistration? ParseRegistrationAttribute(
         AttributeData attributeData,
-        List<Diagnostic> diagnostics,
+        List<DiagnosticInfo> diagnostics,
         Compilation compilation)
     {
         INamedTypeSymbol? attributeClassSymbol = attributeData.AttributeClass;
@@ -250,7 +255,7 @@ internal static class BlueprintParser
         if (conversion is { IsImplicit: false, IsIdentity: false })
         {
             diagnostics.Add(
-                Diagnostic.Create(
+                new DiagnosticInfo(
                     Diagnostics.ImplementationNotAssignable,
                     attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                     implementationType.ToDisplayString(),
@@ -263,7 +268,7 @@ internal static class BlueprintParser
         if (implementationType.IsAbstract)
         {
             diagnostics.Add(
-                Diagnostic.Create(
+                new DiagnosticInfo(
                     Diagnostics.ImplementationIsAbstract,
                     attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(), implementationType.ToDisplayString()
                 )
@@ -274,17 +279,17 @@ internal static class BlueprintParser
         bool isDisposable = implementationType.AllInterfaces.Contains(s_disposableInterface);
 
         return new ServiceRegistration(
-            serviceType,
+            serviceType.ToDisplayString(s_fullyQualifiedFormat),
             implementationType,
             lifetime,
-            attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
+            LocationInfo.CreateFrom(attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation()),
             isDisposable
         );
     }
 
     private static (ITypeSymbol? serviceType, INamedTypeSymbol? implementationType) ExtractServiceAndImplTypes(
         AttributeData attributeData,
-        List<Diagnostic> diagnostics)
+        List<DiagnosticInfo> diagnostics)
     {
         ITypeSymbol? serviceType;
         INamedTypeSymbol? implementationType;
@@ -304,7 +309,11 @@ internal static class BlueprintParser
                 implementationType = ct;
                 break;
             default:
-                diagnostics.Add(Diagnostic.Create(Diagnostics.IncorrectAttribute, location, attributeData.AttributeClass?.Name));
+                diagnostics.Add(
+                    new DiagnosticInfo(
+                        Diagnostics.IncorrectAttribute, location, attributeData.AttributeClass?.Name
+                    )
+                );
                 return (null, null);
         }
 

@@ -36,15 +36,11 @@ internal static class BlueprintValidator
     //         return new ValidationResult(blueprints, diagnostics.ToImmutableArray());
     //     }
     //
-    public static Diagnostic? ValidateContainerIsPartial(in ClassDeclarationSyntax classNode, in INamedTypeSymbol classSymbol)
+    public static DiagnosticInfo? ValidateContainerIsPartial(in ClassDeclarationSyntax classNode, in INamedTypeSymbol classSymbol)
     {
         if (!classNode.Modifiers.Any(SyntaxKind.PartialKeyword))
         {
-            return Diagnostic.Create(
-                Diagnostics.ContainerNotPartial,
-                classNode.Identifier.GetLocation(),
-                classSymbol.Name
-            );
+            return new DiagnosticInfo(Diagnostics.ContainerNotPartial, classNode.Identifier.GetLocation(), classSymbol.Name);
         }
 
         return null;
