@@ -1,11 +1,16 @@
+// ReSharper disable UnusedAutoPropertyAccessor.Global
+
 namespace CSharpDIFramework;
 
+/// <summary>
+///     Registers a service as a singleton in the DI container.
+/// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, Inherited = false, AllowMultiple = true)]
 public class SingletonAttribute : Attribute
 {
     /// <summary>
     ///     Registers a service with a specific implementation.
-    ///     e.g., [Singleton(typeof(IService), typeof(ServiceImpl))]
+    ///     [Singleton(typeof(IService), typeof(ServiceImpl))]
     /// </summary>
     public SingletonAttribute(Type serviceType, Type implementationType)
     {
@@ -15,7 +20,7 @@ public class SingletonAttribute : Attribute
 
     /// <summary>
     ///     Registers a concrete type that serves as its own implementation.
-    ///     e.g., [Singleton(typeof(ConcreteService))]
+    ///     [Singleton(typeof(ConcreteService))]
     /// </summary>
     public SingletonAttribute(Type concreteType)
     {
@@ -27,53 +32,36 @@ public class SingletonAttribute : Attribute
     public Type ImplementationType { get; }
 }
 
+/// <summary>
+///     Registers a service as transient in the DI container.
+/// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, Inherited = false, AllowMultiple = true)]
-public class TransientAttribute : Attribute
+public class TransientAttribute(Type serviceType, Type implementationType) : Attribute
 {
-    public TransientAttribute(Type serviceType, Type implementationType)
-    {
-        ServiceType = serviceType;
-        ImplementationType = implementationType;
-    }
+    public TransientAttribute(Type concreteType) : this(concreteType, concreteType) { }
 
-    public TransientAttribute(Type concreteType)
-    {
-        ServiceType = concreteType;
-        ImplementationType = concreteType;
-    }
-
-    public Type ServiceType { get; }
-    public Type ImplementationType { get; }
+    public Type ServiceType { get; } = serviceType;
+    public Type ImplementationType { get; } = implementationType;
 }
 
+/// <summary>
+///     Registers a service as scoped in the DI container.
+/// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, Inherited = false, AllowMultiple = true)]
-public class ScopedAttribute : Attribute
+public class ScopedAttribute(Type serviceType, Type implementationType) : Attribute
 {
-    public ScopedAttribute(Type serviceType, Type implementationType)
-    {
-        ServiceType = serviceType;
-        ImplementationType = implementationType;
-    }
+    public ScopedAttribute(Type concreteType) : this(concreteType, concreteType) { }
 
-    public ScopedAttribute(Type concreteType)
-    {
-        ServiceType = concreteType;
-        ImplementationType = concreteType;
-    }
-
-    public Type ServiceType { get; }
-    public Type ImplementationType { get; }
+    public Type ServiceType { get; } = serviceType;
+    public Type ImplementationType { get; } = implementationType;
 }
 
+/// <summary>
+///     Registers a decorator for a service in the DI container.
+/// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, Inherited = false, AllowMultiple = true)]
-public class DecorateAttribute : Attribute
+public class DecorateAttribute(Type serviceType, Type implementationType) : Attribute
 {
-    public DecorateAttribute(Type serviceType, Type implementationType)
-    {
-        ServiceType = serviceType;
-        ImplementationType = implementationType;
-    }
-
-    public Type ServiceType { get; }
-    public Type ImplementationType { get; }
+    public Type ServiceType { get; } = serviceType;
+    public Type ImplementationType { get; } = implementationType;
 }
