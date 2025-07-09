@@ -5,4 +5,4 @@ using CSharpDIFramework;
 Console.WriteLine("Hello, World!");
 
 [RegisterContainer]
-public class Container_NotPartial { }
+public partial class ExampleContainer { }

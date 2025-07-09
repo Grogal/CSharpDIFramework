@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Linq;
 
 using Microsoft.CodeAnalysis;
@@ -39,9 +38,8 @@ internal sealed record DiagnosticInfo
 
     public Diagnostic CreateDiagnostic()
     {
-        string[]? arr = MessageArgs.GetArray();
-        IEnumerable<object>? objs = arr;
-        object[]? toArr = objs?.ToArray();
-        return Diagnostic.Create(Descriptor, Location?.ToLocation(), toArr);
+        return Diagnostic.Create(
+            Descriptor, Location?.ToLocation(), MessageArgs.GetArray()?.Cast<object>().ToArray()
+        );
     }
 }

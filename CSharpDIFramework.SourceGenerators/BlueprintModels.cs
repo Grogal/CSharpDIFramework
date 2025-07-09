@@ -1,6 +1,6 @@
 namespace CSharpDIFramework.SourceGenerators;
 
-public static class Constants
+internal static class Constants
 {
     public const string RegisterContainerAttributeName = "CSharpDIFramework.RegisterContainerAttribute";
     public const string SingletonAttributeName = "CSharpDIFramework.SingletonAttribute";
@@ -12,14 +12,14 @@ public static class Constants
     public const string ImportModuleAttributeName = "CSharpDIFramework.ImportModuleAttribute";
 }
 
-public enum ServiceLifetime
+internal enum ServiceLifetime
 {
     Transient,
     Scoped,
     Singleton
 }
 
-public record ConstructorInfo(
+internal record ConstructorInfo(
     EquatableArray<string> ParameterTypeFullNames,
     bool HasInjectAttribute)
 {
@@ -27,7 +27,7 @@ public record ConstructorInfo(
     public bool HasInjectAttribute { get; } = HasInjectAttribute;
 }
 
-public record ServiceImplementationType(
+internal record ServiceImplementationType(
     string FullName,
     LocationInfo? Location,
     EquatableArray<ConstructorInfo> Constructors)
@@ -37,7 +37,7 @@ public record ServiceImplementationType(
     public EquatableArray<ConstructorInfo> Constructors { get; } = Constructors;
 }
 
-public record DecoratorInfo(
+internal record DecoratorInfo(
     string FullName,
     LocationInfo? Location,
     EquatableArray<ConstructorInfo> Constructors)
@@ -47,7 +47,7 @@ public record DecoratorInfo(
     public EquatableArray<ConstructorInfo> Constructors { get; } = Constructors;
 }
 
-public record ServiceRegistration(
+internal record ServiceRegistration(
     string ServiceTypeFullName,
     ServiceImplementationType ImplementationType,
     ServiceLifetime Lifetime,
@@ -62,7 +62,7 @@ public record ServiceRegistration(
     public EquatableArray<DecoratorInfo> Decorators { get; set; } = EquatableArray<DecoratorInfo>.Empty;
 }
 
-public record ServiceProviderDescription(
+internal record ServiceProviderDescription(
     string ContainerFullName,
     string ContainerName,
     string? Namespace,
@@ -78,7 +78,7 @@ public record ServiceProviderDescription(
     public LocationInfo? DeclarationLocation { get; } = DeclarationLocation;
 }
 
-public record ResolvedDecorator(
+internal record ResolvedDecorator(
     DecoratorInfo SourceDecorator,
     ConstructorInfo SelectedConstructor,
     EquatableArray<ResolvedService> Dependencies
@@ -89,7 +89,7 @@ public record ResolvedDecorator(
     public EquatableArray<ResolvedService> Dependencies { get; } = Dependencies;
 }
 
-public record ResolvedService(
+internal record ResolvedService(
     ServiceRegistration SourceRegistration,
     ConstructorInfo SelectedConstructor,
     EquatableArray<ResolvedService> Dependencies,
@@ -104,7 +104,7 @@ public record ResolvedService(
     public EquatableArray<ResolvedDecorator> Decorators { get; } = Decorators;
 }
 
-public record ContainerBlueprint(
+internal record ContainerBlueprint(
     string ContainerName,
     string? Namespace,
     EquatableArray<ResolvedService> Services,

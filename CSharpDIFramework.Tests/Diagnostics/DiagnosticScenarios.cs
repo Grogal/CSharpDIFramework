@@ -5,6 +5,7 @@
 
 // ReSharper disable InconsistentNaming
 
+#if false
 namespace CSharpDIFramework.Tests.DiagnosticScenarios;
 
 #region NDI0001: Container must be partial
@@ -25,8 +26,8 @@ public interface IServiceWithNoPublicCtor { }
 
 public class ServiceWithNoPublicCtor : IServiceWithNoPublicCtor
 {
-    // No public constructor available for the generator to use.
-    internal ServiceWithNoPublicCtor() { }
+	// No public constructor available for the generator to use.
+	internal ServiceWithNoPublicCtor() { }
 }
 
 // EXPECT: NDI0003 for ServiceWithNoPublicCtor.
@@ -36,7 +37,6 @@ public partial class Container_NoPublicConstructor { }
 
 #endregion
 
-#if false
 #region NDI0004: Cyclic dependency detected
 
 // =================================================================

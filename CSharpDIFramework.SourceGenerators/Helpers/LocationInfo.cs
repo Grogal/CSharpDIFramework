@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace CSharpDIFramework.SourceGenerators;
 
-public record LocationInfo(string FilePath, TextSpan TextSpan, LinePositionSpan LineSpan)
+internal record LocationInfo(string FilePath, TextSpan TextSpan, LinePositionSpan LineSpan)
 {
     public string FilePath { get; } = FilePath;
     public TextSpan TextSpan { get; } = TextSpan;
