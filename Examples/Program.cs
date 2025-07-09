@@ -1,8 +1,10 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using CSharpDIFramework;
+﻿using CSharpDIFramework;
 
 Console.WriteLine("Hello, World!");
 
-[RegisterContainer]
-public partial class ExampleContainer { }
+internal partial class Parent<T>
+    where T : class
+{
+    [RegisterContainer]
+    public partial class MyContainer { }
+}

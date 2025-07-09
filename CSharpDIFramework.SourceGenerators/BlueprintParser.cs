@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -61,19 +62,6 @@ internal static class BlueprintParser
         );
 
         return (description, new EquatableArray<DiagnosticInfo>(diagnostics));
-    }
-
-    private static EquatableArray<string> GetContainingTypeDeclarations(INamedTypeSymbol classSymbol)
-    {
-        var declarations = new List<string>();
-        INamedTypeSymbol? parent = classSymbol.ContainingType;
-        while (parent != null)
-        {
-            declarations.Insert(0, $"public partial class {parent.Name}");
-            parent = parent.ContainingType;
-        }
-
-        return new EquatableArray<string>(declarations);
     }
 
     private static void ParseAttributesFromType(
@@ -340,6 +328,83 @@ internal static class BlueprintParser
         }
 
         return new EquatableArray<ConstructorInfo>(constructorInfos);
+    }
+
+    /// <summary>
+    /// Gets the full declarations of all containing types for a given symbol, ensuring they are marked as partial.
+    /// This is crucial for generating code for nested container classes.
+    /// </summary>
+    private static EquatableArray<string> GetContainingTypeDeclarations(INamedTypeSymbol classSymbol)
+    {
+        var declarations = new List<string>();
+        INamedTypeSymbol? parent = classSymbol.ContainingType;
+        while (parent != null)
+        {
+            // Get the full, correct declaration for the parent type.
+            string? declaration = GetTypeDeclarationFromSymbol(parent);
+            if (declaration is not null)
+            {
+                declarations.Insert(0, declaration);
+            }
+            // If the declaration is null, it means the parent is not in a source (e.g., from metadata).
+            // A container cannot be nested in a type from another assembly, so this is a safe assumption.
+
+            parent = parent.ContainingType;
+        }
+
+        return new EquatableArray<string>(declarations);
+    }
+
+    /// <summary>
+    /// Reconstructs the source-code signature of a type declaration from its symbol.
+    /// Example: "public partial static record MyRecordT where T: new()"
+    /// </summary>
+    private static string? GetTypeDeclarationFromSymbol(INamedTypeSymbol typeSymbol)
+    {
+        // Find the syntax declaration for the symbol. We only need one, even for partial types.
+        if (typeSymbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is not TypeDeclarationSyntax typeSyntax)
+        {
+            return null; // Should not happen for a container's parent types.
+        }
+
+        var sb = new StringBuilder();
+
+        // 1. Modifiers (e.g., public, internal, partial, static)
+        bool hasPartial = false;
+        foreach (var modifier in typeSyntax.Modifiers)
+        {
+            sb.Append(modifier.Text).Append(' ');
+            if (modifier.IsKind(SyntaxKind.PartialKeyword))
+            {
+                hasPartial = true;
+            }
+        }
+
+        // The source generator MUST output a partial class. The check for this is done
+        // in Parse(), but we ensure the generated code has it regardless.
+        if (!hasPartial)
+        {
+            // This case should be blocked by a diagnostic, but we generate the correct code defensively.
+            sb.Insert(0, "partial ");
+        }
+
+        // 2. Type Keyword (class, struct, record)
+        sb.Append(typeSyntax.Keyword.Text).Append(' ');
+
+        // 3. Identifier and Generic Type Parameters (e.g., MyType<T>)
+        sb.Append(typeSyntax.Identifier.Text);
+        if (typeSyntax.TypeParameterList is not null)
+        {
+            sb.Append(typeSyntax.TypeParameterList);
+        }
+
+        // 4. Generic Constraints (e.g., where T : new())
+        foreach (var constraintClause in typeSyntax.ConstraintClauses)
+        {
+            sb.Append(' ').Append(constraintClause);
+        }
+
+        return sb.ToString();
     }
 
     private static DiagnosticInfo? ValidateContainerIsPartial(in ClassDeclarationSyntax classNode, in INamedTypeSymbol classSymbol)
