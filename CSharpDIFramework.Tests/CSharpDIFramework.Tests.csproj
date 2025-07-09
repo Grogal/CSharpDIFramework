@@ -21,4 +21,19 @@
                           ReferenceOutputAssembly="false"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <Compile Include="..\CSharpDIFramework.SourceGenerators\Helpers\DiagnosticInfo.cs">
+            <Link>Helpers\DiagnosticInfo.cs</Link>
+        </Compile>
+        <Compile Include="..\CSharpDIFramework.SourceGenerators\Helpers\EquatableArray.cs">
+            <Link>Helpers\EquatableArray.cs</Link>
+        </Compile>
+        <Compile Include="..\CSharpDIFramework.SourceGenerators\Helpers\HashCode.cs">
+            <Link>Helpers\HashCode.cs</Link>
+        </Compile>
+        <Compile Include="..\CSharpDIFramework.SourceGenerators\Helpers\LocationInfo.cs">
+            <Link>Helpers\LocationInfo.cs</Link>
+        </Compile>
+    </ItemGroup>
+
 </Project>

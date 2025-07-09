@@ -3,7 +3,8 @@
 // from the build by the #if false directive and serves as documentation and a
 // source for manual or future automated diagnostic testing.
 
-#if false
+// ReSharper disable InconsistentNaming
+
 namespace CSharpDIFramework.Tests.DiagnosticScenarios;
 
 #region NDI0001: Container must be partial
@@ -35,6 +36,7 @@ public partial class Container_NoPublicConstructor { }
 
 #endregion
 
+#if false
 #region NDI0004: Cyclic dependency detected
 
 // =================================================================
@@ -433,5 +435,4 @@ public class CyclicWithNullable(ICyclicWithNullable? self) : ICyclicWithNullable
 public partial class Container_CyclicDependencyWithNullable { }
 
 #endregion
-
 #endif

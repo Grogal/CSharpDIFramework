@@ -108,7 +108,7 @@ internal static class BlueprintParser
                     else
                     {
                         diagnostics.Add(
-                            new DiagnosticInfo(
+                            DiagnosticInfo.Create(
                                 Diagnostics.ImportedTypeNotAModule, attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                                 moduleType.ToDisplayString()
                             )
@@ -128,7 +128,7 @@ internal static class BlueprintParser
                     if (registrationMap.ContainsKey(registration.ServiceTypeFullName))
                     {
                         diagnostics.Add(
-                            new DiagnosticInfo(
+                            DiagnosticInfo.Create(
                                 Diagnostics.DuplicateRegistrationConstructors, registration.RegistrationLocation, registration.ServiceTypeFullName
                             )
                         );
@@ -165,7 +165,7 @@ internal static class BlueprintParser
             if (conversion is { IsImplicit: false, IsIdentity: false })
             {
                 diagnostics.Add(
-                    new DiagnosticInfo(
+                    DiagnosticInfo.Create(
                         Diagnostics.ImplementationNotAssignable, attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                         decoratorType.ToDisplayString(), serviceType.ToDisplayString()
                     )
@@ -176,7 +176,7 @@ internal static class BlueprintParser
             if (decoratorType.IsAbstract)
             {
                 diagnostics.Add(
-                    new DiagnosticInfo(
+                    DiagnosticInfo.Create(
                         Diagnostics.ImplementationIsAbstract, attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                         decoratorType.ToDisplayString()
                     )
@@ -193,7 +193,7 @@ internal static class BlueprintParser
             if (registrationToDecorate.Decorators.Any(d => d.FullName == decoratorInfo.FullName))
             {
                 diagnostics.Add(
-                    new DiagnosticInfo(
+                    DiagnosticInfo.Create(
                         Diagnostics.DuplicateDecoratorRegistration, attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(), decoratorType.Name,
                         serviceType.Name
                     )
@@ -209,7 +209,7 @@ internal static class BlueprintParser
         else
         {
             diagnostics.Add(
-                new DiagnosticInfo(
+                DiagnosticInfo.Create(
                     Diagnostics.DecoratorForUnregisteredService,
                     attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                     decoratorType.Name,
@@ -254,7 +254,7 @@ internal static class BlueprintParser
         if (conversion is { IsImplicit: false, IsIdentity: false })
         {
             diagnostics.Add(
-                new DiagnosticInfo(
+                DiagnosticInfo.Create(
                     Diagnostics.ImplementationNotAssignable, attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                     implementationType.ToDisplayString(), serviceType.ToDisplayString()
                 )
@@ -265,7 +265,7 @@ internal static class BlueprintParser
         if (implementationType.IsAbstract)
         {
             diagnostics.Add(
-                new DiagnosticInfo(
+                DiagnosticInfo.Create(
                     Diagnostics.ImplementationIsAbstract, attributeData.ApplicationSyntaxReference!.GetSyntax().GetLocation(),
                     implementationType.ToDisplayString()
                 )
@@ -308,7 +308,13 @@ internal static class BlueprintParser
                 implementationType = ct;
                 break;
             default:
-                diagnostics.Add(new DiagnosticInfo(Diagnostics.IncorrectAttribute, location, attributeData.AttributeClass?.Name));
+                diagnostics.Add(
+                    DiagnosticInfo.Create(
+                        Diagnostics.IncorrectAttribute,
+                        location,
+                        attributeData.AttributeClass?.Name!
+                    )
+                );
                 return (null, null);
         }
 
@@ -340,7 +346,7 @@ internal static class BlueprintParser
     {
         if (!classNode.Modifiers.Any(SyntaxKind.PartialKeyword))
         {
-            return new DiagnosticInfo(Diagnostics.ContainerNotPartial, classNode.Identifier.GetLocation(), classSymbol.Name);
+            return DiagnosticInfo.Create(Diagnostics.ContainerNotPartial, classNode.Identifier.GetLocation(), classSymbol.Name);
         }
 
         return null;

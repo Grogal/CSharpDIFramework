@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
 
-using Microsoft.CodeAnalysis;
-
 namespace CSharpDIFramework.SourceGenerators;
 
 internal class GraphBuilder
@@ -28,7 +26,7 @@ internal class GraphBuilder
             ResolveService(registration, new Stack<string>());
         }
 
-        if (_diagnostics.Any(d => d.Descriptor.DefaultSeverity == DiagnosticSeverity.Error))
+        if (_diagnostics.Any(d => d.IsError))
         {
             return (null, new EquatableArray<DiagnosticInfo>(_diagnostics));
         }
@@ -55,7 +53,7 @@ internal class GraphBuilder
         if (path.Contains(serviceType))
         {
             string cyclePath = string.Join(" -> ", path.Reverse()) + $" -> {serviceType}";
-            _diagnostics.Add(new DiagnosticInfo(Diagnostics.CyclicDependency, _registrationMap[path.Peek()].RegistrationLocation, path.Peek(), cyclePath));
+            _diagnostics.Add(DiagnosticInfo.Create(Diagnostics.CyclicDependency, _registrationMap[path.Peek()].RegistrationLocation, path.Peek(), cyclePath));
             return null;
         }
 
@@ -87,7 +85,7 @@ internal class GraphBuilder
 
         path.Pop();
 
-        if (_diagnostics.Any(d => d.Descriptor.DefaultSeverity == DiagnosticSeverity.Error))
+        if (_diagnostics.Any(d => d.IsError))
         {
             return null;
         }
@@ -114,7 +112,7 @@ internal class GraphBuilder
             if (!_registrationMap.TryGetValue(paramTypeName, out ServiceRegistration? dependencyRegistration))
             {
                 _diagnostics.Add(
-                    new DiagnosticInfo(
+                    DiagnosticInfo.Create(
                         Diagnostics.ServiceNotRegistered, parentRegistration.RegistrationLocation, paramTypeName, parentRegistration.ImplementationType.FullName
                     )
                 );
@@ -125,10 +123,9 @@ internal class GraphBuilder
             if (effectiveParentLifetime > dependencyRegistration.Lifetime)
             {
                 bool isDecorator = parentRegistration.ImplementationType.FullName != parentRegistration.ServiceTypeFullName;
-                DiagnosticDescriptor descriptor = isDecorator ? Diagnostics.DecoratorCaptiveDependency : Diagnostics.LifestyleMismatch;
                 _diagnostics.Add(
-                    new DiagnosticInfo(
-                        descriptor,
+                    DiagnosticInfo.Create(
+                        isDecorator ? Diagnostics.DecoratorCaptiveDependency : Diagnostics.LifestyleMismatch,
                         parentRegistration.RegistrationLocation,
                         parentRegistration.ImplementationType.FullName,
                         effectiveParentLifetime.ToString(),
@@ -156,7 +153,7 @@ internal class GraphBuilder
 
         if (publicConstructors is null || publicConstructors.Length == 0)
         {
-            _diagnostics.Add(new DiagnosticInfo(Diagnostics.NoPublicConstructor, location, implementationType.FullName));
+            _diagnostics.Add(DiagnosticInfo.Create(Diagnostics.NoPublicConstructor, location, implementationType.FullName));
             return null;
         }
 
@@ -164,7 +161,7 @@ internal class GraphBuilder
 
         if (injectConstructors.Count > 1)
         {
-            _diagnostics.Add(new DiagnosticInfo(Diagnostics.MultipleInjectConstructors, location, implementationType.FullName));
+            _diagnostics.Add(DiagnosticInfo.Create(Diagnostics.MultipleInjectConstructors, location, implementationType.FullName));
             return null;
         }
 
@@ -184,7 +181,7 @@ internal class GraphBuilder
         if (greediestConstructors.Count > 1)
         {
             _diagnostics.Add(
-                new DiagnosticInfo(
+                DiagnosticInfo.Create(
                     Diagnostics.AmbiguousConstructors,
                     location,
                     implementationType.FullName,
@@ -205,7 +202,7 @@ internal class GraphBuilder
         if (publicConstructors is null || publicConstructors.Length == 0)
         {
             // This case should be caught by NoPublicConstructor on the decorator type itself, but we check defensively.
-            _diagnostics.Add(new DiagnosticInfo(Diagnostics.NoPublicConstructor, location, decoratorType.FullName));
+            _diagnostics.Add(DiagnosticInfo.Create(Diagnostics.NoPublicConstructor, location, decoratorType.FullName));
             return null;
         }
 
@@ -215,7 +212,7 @@ internal class GraphBuilder
 
         if (candidates.Count == 0)
         {
-            _diagnostics.Add(new DiagnosticInfo(Diagnostics.DecoratorMissingDecoratedServiceParameter, location, decoratorType.FullName, serviceToDecorate));
+            _diagnostics.Add(DiagnosticInfo.Create(Diagnostics.DecoratorMissingDecoratedServiceParameter, location, decoratorType.FullName, serviceToDecorate));
             return null;
         }
 
@@ -223,7 +220,7 @@ internal class GraphBuilder
         List<ConstructorInfo> injectConstructors = candidates.Where(c => c.HasInjectAttribute).ToList();
         if (injectConstructors.Count > 1)
         {
-            _diagnostics.Add(new DiagnosticInfo(Diagnostics.MultipleInjectConstructors, location, decoratorType.FullName));
+            _diagnostics.Add(DiagnosticInfo.Create(Diagnostics.MultipleInjectConstructors, location, decoratorType.FullName));
             return null;
         }
 
@@ -243,7 +240,7 @@ internal class GraphBuilder
         if (greediestConstructors.Count > 1)
         {
             _diagnostics.Add(
-                new DiagnosticInfo(
+                DiagnosticInfo.Create(
                     Diagnostics.AmbiguousDecoratorConstructors,
                     location,
                     decoratorType.FullName,
