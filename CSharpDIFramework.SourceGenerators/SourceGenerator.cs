@@ -27,12 +27,10 @@ public class SourceGenerator : IIncrementalGenerator
             {
                 (ServiceProviderDescription? description, EquatableArray<DiagnosticInfo> diagnostics) = source;
 
-                // Determine a safe filename. Use the container name or a timestamp.
                 string debugFileName = description is not null
                     ? $"_DEBUG_{description.ContainerName}.g.cs"
                     : $"_DEBUG_OrphanedDiagnostics_{DateTime.Now:HH_mm_ss_fff}.g.cs";
 
-                // Use a helper to generate the debug text
                 string debugContent = GenerateDebugOutput(description, diagnostics);
 
                 spc.AddSource(debugFileName, debugContent);
