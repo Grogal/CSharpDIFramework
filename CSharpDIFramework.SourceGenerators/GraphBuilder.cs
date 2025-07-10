@@ -109,6 +109,11 @@ internal class GraphBuilder
                 continue;
             }
 
+            if (paramTypeName == Constants.ResolverInterfaceName)
+            {
+                continue;
+            }
+
             if (!_registrationMap.TryGetValue(paramTypeName, out ServiceRegistration? dependencyRegistration))
             {
                 _diagnostics.Add(

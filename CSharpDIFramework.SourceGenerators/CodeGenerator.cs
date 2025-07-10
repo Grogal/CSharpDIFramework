@@ -29,7 +29,7 @@ internal static class CodeGenerator
         }
 
         var baseIndent = new string(' ', indentLevel * 4);
-        sb.AppendLine($"{baseIndent}public partial class {blueprint.ContainerName} : global::System.IDisposable");
+        sb.AppendLine($"{baseIndent}public partial class {blueprint.ContainerName} : global::System.IDisposable, global::CSharpDIFramework.IResolver");
         sb.AppendLine($"{baseIndent}{{");
         sb.AppendLine($"{baseIndent}    private bool _isDisposed;");
 
@@ -205,7 +205,7 @@ internal static class CodeGenerator
         var doubleIndent = new string(' ', (indentLevel + 2) * 4);
         var tripleIndent = new string(' ', (indentLevel + 3) * 4);
 
-        sb.AppendLine($"{indent}private sealed partial class Scope : global::CSharpDIFramework.IContainerScope");
+        sb.AppendLine($"{indent}private sealed partial class Scope : global::CSharpDIFramework.IContainerScope, global::CSharpDIFramework.IResolver");
         sb.AppendLine($"{indent}{{");
         sb.AppendLine($"{innerIndent}private readonly {blueprint.ContainerName} _root;");
         sb.AppendLine($"{innerIndent}private readonly global::System.Collections.Generic.Dictionary<global::System.Type, object> _scopedInstances = new();");
@@ -330,33 +330,60 @@ internal static class CodeGenerator
 
     private static string GenerateInstanceCreation(ResolvedService service, string resolverContext)
     {
+        // The main logic for creating the base service instance.
         string baseImplType = service.SourceRegistration.ImplementationType.FullName;
-        IEnumerable<string> baseArgs = service.Dependencies.GetArray()!
-                                              .Select(d => $"{resolverContext}.Resolve<{d.ServiceTypeFullName}>()");
-        var currentCall = $"new {baseImplType}({string.Join(", ", baseArgs)})";
+        string baseArgs = GenerateArgumentList(
+            service.SelectedConstructor.ParameterTypeFullNames,
+            resolverContext
+        );
+        var currentCall = $"new {baseImplType}({baseArgs})";
 
-        // Decorators are applied inside-out. The registration order is preserved in the blueprint,
-        // so we iterate normally.
+        // Now, apply decorators. The logic is cleaner because we reuse the helper.
         foreach (ResolvedDecorator decorator in service.Decorators)
         {
             string decoratorTypeName = decorator.SourceDecorator.FullName;
-            var decoratorArgs = new List<string>();
-
-            foreach (string paramTypeName in decorator.SelectedConstructor.ParameterTypeFullNames)
-            {
-                if (paramTypeName == service.ServiceTypeFullName)
-                {
-                    decoratorArgs.Add(currentCall);
-                }
-                else
-                {
-                    decoratorArgs.Add($"{resolverContext}.Resolve<{paramTypeName}>()");
-                }
-            }
-
-            currentCall = $"new {decoratorTypeName}({string.Join(", ", decoratorArgs)})";
+            string decoratorArgs = GenerateArgumentList(
+                decorator.SelectedConstructor.ParameterTypeFullNames,
+                resolverContext,
+                service.ServiceTypeFullName, // The service being decorated
+                currentCall // The instance to pass for the decorated service
+            );
+            currentCall = $"new {decoratorTypeName}({decoratorArgs})";
         }
 
         return currentCall;
+    }
+
+    /// <summary>
+    ///     A helper method that generates the comma-separated argument list for a constructor call.
+    /// </summary>
+    private static string GenerateArgumentList(
+        EquatableArray<string> parameterTypes,
+        string resolverContext,
+        string? decoratedServiceType = null,
+        string? decoratedServiceInstance = null)
+    {
+        IEnumerable<string> arguments = parameterTypes
+                                        .GetArray()!
+                                        .Select(paramTypeName =>
+                                            {
+                                                if (paramTypeName == Constants.ResolverInterfaceName)
+                                                {
+                                                    // This parameter is the IResolver interface.
+                                                    return resolverContext;
+                                                }
+
+                                                if (decoratedServiceType != null && paramTypeName == decoratedServiceType)
+                                                {
+                                                    // This parameter is for the service being decorated.
+                                                    return decoratedServiceInstance!;
+                                                }
+
+                                                // Otherwise, it's a standard service that needs to be resolved.
+                                                return $"{resolverContext}.Resolve<{paramTypeName}>()";
+                                            }
+                                        );
+
+        return string.Join(", ", arguments);
     }
 }

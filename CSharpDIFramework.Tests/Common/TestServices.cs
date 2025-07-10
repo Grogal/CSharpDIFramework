@@ -522,6 +522,22 @@ public class ServiceWithConcreteNullableDep(NullableConcreteService? service) : 
     #endregion
 }
 
+public class SimpleFactory
+{
+    private readonly IResolver _resolver;
+
+    public SimpleFactory(IResolver resolver)
+    {
+        _resolver = resolver;
+    }
+
+    public T Create<T>()
+        where T : class
+    {
+        return _resolver.Resolve<T>();
+    }
+}
+
 [RegisterModule]
 [Singleton(typeof(ILogger), typeof(StringBuilderLogger))]
 public interface ILoggingModule { }

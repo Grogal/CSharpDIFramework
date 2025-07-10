@@ -37,6 +37,31 @@ public partial class ResolutionTests
         await Assert.That(service.Singleton).IsSameReferenceAs(singletonDep);
     }
 
+    [Test]
+    public async ValueTask Resolve_SimpleFactory()
+    {
+        var container = new SimpleFactoryContainer();
+        var factory = container.Resolve<SimpleFactory>();
+        await Assert.That(factory).IsNotNull();
+
+        var service = factory.Create<ISingletonService>();
+        await Assert.That(service).IsNotNull();
+    }
+
+    [Test]
+    public async ValueTask Resolve_SimpleScopedFactoryContainer()
+    {
+        var container = new SimpleScopedFactoryContainer();
+
+        using IContainerScope scope = container.CreateScope();
+
+        var factory = scope.Resolve<SimpleFactory>();
+        await Assert.That(factory).IsNotNull();
+
+        var service = factory.Create<IScopedService>();
+        await Assert.That(service).IsNotNull();
+    }
+
     [RegisterContainer]
     [Singleton(typeof(ISingletonService), typeof(SingletonService))]
     public partial class SimpleContainer { }
@@ -48,4 +73,14 @@ public partial class ResolutionTests
     [Singleton(typeof(ISingletonService), typeof(SingletonService))]
     [Transient(typeof(IServiceWithDependency), typeof(ServiceWithDependency))]
     public partial class DependencyContainer { }
+
+    [RegisterContainer]
+    [Singleton(typeof(SimpleFactory))]
+    [Singleton(typeof(ISingletonService), typeof(SingletonService))]
+    public partial class SimpleFactoryContainer { }
+
+    [RegisterContainer]
+    [Scoped(typeof(SimpleFactory))]
+    [Scoped(typeof(IScopedService), typeof(ScopedService))]
+    public partial class SimpleScopedFactoryContainer { }
 }
