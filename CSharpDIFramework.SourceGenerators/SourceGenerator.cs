@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Linq;
 
 using Microsoft.CodeAnalysis;
@@ -7,13 +6,13 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace CSharpDIFramework.SourceGenerators;
 
 [Generator]
-public class SourceGenerator : IIncrementalGenerator
+internal class SourceGenerator : IIncrementalGenerator
 {
     #region IIncrementalGenerator Implementation
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        IncrementalValuesProvider<(ServiceProviderDescription? Description, ImmutableArray<Diagnostic> Diagnostics)> parsedProvider =
+        IncrementalValuesProvider<(ServiceProviderDescription? Description, EquatableArray<DiagnosticInfo> Diagnostics)> parsedProvider =
             context.SyntaxProvider
                    .ForAttributeWithMetadataName(
                        Constants.RegisterContainerAttributeName,
@@ -21,54 +20,51 @@ public class SourceGenerator : IIncrementalGenerator
                        (ctx, _) => BlueprintParser.Parse(ctx)
                    );
 
-        IncrementalValuesProvider<ImmutableArray<Diagnostic>> parsingDiagnostics =
+        IncrementalValuesProvider<EquatableArray<DiagnosticInfo>> parsingDiagnostics =
             parsedProvider.Select((source, _) => source.Diagnostics);
 
         context.RegisterSourceOutput(
             parsingDiagnostics, (spc, diagnostics) =>
             {
-                foreach (Diagnostic? diagnostic in diagnostics)
+                foreach (DiagnosticInfo? diagnostic in diagnostics)
                 {
-                    spc.ReportDiagnostic(diagnostic);
+                    spc.ReportDiagnostic(diagnostic.CreateDiagnostic());
                 }
             }
         );
 
         IncrementalValuesProvider<ServiceProviderDescription> descriptionProvider =
             parsedProvider.Select((source, _) => source.Description)
-                          .Where(bp =>
-                              {
-                                  if (bp is null)
-                                  {
-                                      return false;
-                                  }
+                          .Where(desc => desc is not null)!;
 
-                                  return true;
-                              }
-                          )!;
+        IncrementalValuesProvider<(ServiceProviderDescription, ContainerBlueprint?, EquatableArray<DiagnosticInfo>)> graphProvider =
+            descriptionProvider.Select((description, _) =>
+                {
+                    var graphBuilder = new GraphBuilder(description);
+                    (ContainerBlueprint? blueprint, EquatableArray<DiagnosticInfo> diagnostics) = graphBuilder.Build();
+                    return (description, blueprint, diagnostics);
+                }
+            );
 
         context.RegisterSourceOutput(
-            descriptionProvider, (spc, description) =>
+            graphProvider, (spc, source) =>
             {
-                if (description is null)
+                (ServiceProviderDescription? description, ContainerBlueprint? blueprint, EquatableArray<DiagnosticInfo> diagnostics) = source;
+
+                foreach (DiagnosticInfo diagnostic in diagnostics)
+                {
+                    spc.ReportDiagnostic(diagnostic.CreateDiagnostic());
+                }
+
+                if (description == null)
                 {
                     return;
                 }
 
-                // spc.AddSource($"{description.ContainerSymbol.Name}.g.cs", description.ToString());
-
-                var graphBuilder = new GraphBuilder(description);
-                (ContainerBlueprint? blueprint, ImmutableArray<Diagnostic> diagnostics) = graphBuilder.Build();
-
-                foreach (Diagnostic? diagnostic in diagnostics)
+                bool hasErrors = diagnostics.Any(d => d.Descriptor.DefaultSeverity == DiagnosticSeverity.Error);
+                if (hasErrors)
                 {
-                    spc.ReportDiagnostic(diagnostic);
-                }
-
-                if (diagnostics.Any(d => d.Severity == DiagnosticSeverity.Warning || d.Severity == DiagnosticSeverity.Error))
-                {
-                    string dummyBlueprintName = description.ContainerSymbol.Name;
-                    spc.AddSource($"{dummyBlueprintName}.g.cs", CodeGenerator.GenerateDummyFromName(dummyBlueprintName, description.ContainerSymbol));
+                    spc.AddSource($"{description.ContainerName}.g.cs", CodeGenerator.GenerateDummyContainer(description));
                 }
                 else if (blueprint != null)
                 {

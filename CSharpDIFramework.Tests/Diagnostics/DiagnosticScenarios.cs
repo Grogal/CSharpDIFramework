@@ -3,6 +3,8 @@
 // from the build by the #if false directive and serves as documentation and a
 // source for manual or future automated diagnostic testing.
 
+// ReSharper disable InconsistentNaming
+
 #if false
 namespace CSharpDIFramework.Tests.DiagnosticScenarios;
 
@@ -24,8 +26,8 @@ public interface IServiceWithNoPublicCtor { }
 
 public class ServiceWithNoPublicCtor : IServiceWithNoPublicCtor
 {
-    // No public constructor available for the generator to use.
-    internal ServiceWithNoPublicCtor() { }
+	// No public constructor available for the generator to use.
+	internal ServiceWithNoPublicCtor() { }
 }
 
 // EXPECT: NDI0003 for ServiceWithNoPublicCtor.
@@ -433,5 +435,4 @@ public class CyclicWithNullable(ICyclicWithNullable? self) : ICyclicWithNullable
 public partial class Container_CyclicDependencyWithNullable { }
 
 #endregion
-
 #endif

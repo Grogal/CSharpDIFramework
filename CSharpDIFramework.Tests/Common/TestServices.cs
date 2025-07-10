@@ -1,5 +1,10 @@
 using System.Text;
 
+// ReSharper disable UnusedParameter.Local
+
+// ReSharper disable UnusedMember.Global
+#pragma warning disable CS9113 // Parameter is unread.
+
 namespace CSharpDIFramework.Tests;
 
 // A single file containing all reusable services and modules for testing.
