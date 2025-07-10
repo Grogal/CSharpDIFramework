@@ -19,6 +19,7 @@
         <ProjectReference Include="..\CSharpDIFramework.SourceGenerators\CSharpDIFramework.SourceGenerators.csproj"
                           OutputItemType="Analyzer"
                           ReferenceOutputAssembly="false"/>
+        <ProjectReference Include="..\ExampleModules\ExampleModules.csproj" />
     </ItemGroup>
 
     <ItemGroup>

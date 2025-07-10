@@ -1,3 +1,5 @@
+using ExampleModules;
+
 namespace CSharpDIFramework.Tests;
 
 public partial class ModulesTests
@@ -62,6 +64,15 @@ public partial class ModulesTests
         await Assert.That(scoped).IsNotNull();
     }
 
+    [Test]
+    public async Task Resolve_ExternalModuleContainer()
+    {
+        var container = new ExternalModuleContainer();
+
+        var singleton = container.Resolve<ServiceFromModule>();
+        await Assert.That(singleton).IsNotNull();
+    }
+
     [RegisterContainer]
     [ImportModule(typeof(ILoggingModule))]
     [Transient(typeof(IAppService), typeof(AppService))]
@@ -84,4 +95,8 @@ public partial class ModulesTests
     [RegisterContainer]
     [ImportModule(typeof(ICyclicModuleA))] // Import one of the cyclic modules
     public partial class CyclicModuleContainer { }
+
+    [RegisterContainer]
+    [ImportModule(typeof(IExampleModule))] // Import one of the cyclic modules
+    public partial class ExternalModuleContainer { }
 }
