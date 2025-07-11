@@ -12,6 +12,7 @@ internal static class Constants
     public const string ImportModuleAttributeName = "CSharpDIFramework.ImportModuleAttribute";
 
     public const string ResolverInterfaceName = "global::CSharpDIFramework.IResolver";
+    public const string ContainerInterfaceName = "global::CSharpDIFramework.IContainer";
 }
 
 internal enum ServiceLifetime

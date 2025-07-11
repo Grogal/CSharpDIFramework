@@ -62,6 +62,15 @@ public partial class ResolutionTests
         await Assert.That(service).IsNotNull();
     }
 
+    [Test]
+    public async ValueTask Resolve_SingletonWithIContainer_DependencyIsContainerInstance()
+    {
+        var container = new ContainerWithIContainer();
+        var service = container.Resolve<ISingletonWithContainerDep>();
+        await Assert.That(service).IsNotNull();
+        await Assert.That(service.Container).IsSameReferenceAs(container);
+    }
+
     [RegisterContainer]
     [Singleton(typeof(ISingletonService), typeof(SingletonService))]
     public partial class SimpleContainer { }
@@ -83,4 +92,8 @@ public partial class ResolutionTests
     [Scoped(typeof(SimpleFactory))]
     [Scoped(typeof(IScopedService), typeof(ScopedService))]
     public partial class SimpleScopedFactoryContainer { }
+
+    [RegisterContainer]
+    [Singleton(typeof(ISingletonWithContainerDep), typeof(SingletonWithContainerDep))]
+    public partial class ContainerWithIContainer { }
 }

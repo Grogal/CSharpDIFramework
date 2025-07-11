@@ -8,6 +8,7 @@
 #if false
 namespace CSharpDIFramework.Tests.DiagnosticScenarios;
 
+
 #region NDI0001: Container must be partial
 
 // =================================================================
@@ -26,8 +27,8 @@ public interface IServiceWithNoPublicCtor { }
 
 public class ServiceWithNoPublicCtor : IServiceWithNoPublicCtor
 {
-	// No public constructor available for the generator to use.
-	internal ServiceWithNoPublicCtor() { }
+    // No public constructor available for the generator to use.
+    internal ServiceWithNoPublicCtor() { }
 }
 
 // EXPECT: NDI0003 for ServiceWithNoPublicCtor.
@@ -435,4 +436,39 @@ public class CyclicWithNullable(ICyclicWithNullable? self) : ICyclicWithNullable
 public partial class Container_CyclicDependencyWithNullable { }
 
 #endregion
+
+#region IContainer Injection Scenarios
+
+// --- Singleton with IContainer (should succeed) ---
+public interface ISingletonWithContainer { }
+
+public class SingletonWithContainer(IContainer container) : ISingletonWithContainer { }
+
+// EXPECT: No diagnostic for this usage.
+[RegisterContainer]
+[Singleton(typeof(ISingletonWithContainer), typeof(SingletonWithContainer))]
+public partial class Container_SingletonWithContainer { }
+
+// --- Scoped with IContainer (should trigger NDI0011) ---
+public interface IScopedWithContainer { }
+
+public class ScopedWithContainer(IContainer container) : IScopedWithContainer { }
+
+// EXPECT: NDI0011 at ScopedWithContainer registration: Scoped service cannot depend on IContainer (singleton).
+[RegisterContainer]
+[Scoped(typeof(IScopedWithContainer), typeof(ScopedWithContainer))]
+public partial class Container_ScopedWithContainer { }
+
+// --- Transient with IContainer (should trigger NDI0011) ---
+public interface ITransientWithContainer { }
+
+public class TransientWithContainer(IContainer container) : ITransientWithContainer { }
+
+// EXPECT: NDI0011 at TransientWithContainer registration: Transient service cannot depend on IContainer (singleton).
+[RegisterContainer]
+[Transient(typeof(ITransientWithContainer), typeof(TransientWithContainer))]
+public partial class Container_TransientWithContainer { }
+
+#endregion
+
 #endif

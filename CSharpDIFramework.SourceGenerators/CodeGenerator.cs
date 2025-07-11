@@ -29,7 +29,7 @@ internal static class CodeGenerator
         }
 
         var baseIndent = new string(' ', indentLevel * 4);
-        sb.AppendLine($"{baseIndent}public partial class {blueprint.ContainerName} : global::System.IDisposable, global::CSharpDIFramework.IResolver");
+        sb.AppendLine($"{baseIndent}public partial class {blueprint.ContainerName} : global::CSharpDIFramework.IContainer");
         sb.AppendLine($"{baseIndent}{{");
         sb.AppendLine($"{baseIndent}    private bool _isDisposed;");
 
@@ -372,13 +372,16 @@ internal static class CodeGenerator
                                                     // This parameter is the IResolver interface.
                                                     return resolverContext;
                                                 }
-
+                                                if (paramTypeName == Constants.ContainerInterfaceName)
+                                                {
+                                                    // Only the root container can provide IContainer. resolverContext must be the root.
+                                                    return "this";
+                                                }
                                                 if (decoratedServiceType != null && paramTypeName == decoratedServiceType)
                                                 {
                                                     // This parameter is for the service being decorated.
                                                     return decoratedServiceInstance!;
                                                 }
-
                                                 // Otherwise, it's a standard service that needs to be resolved.
                                                 return $"{resolverContext}.Resolve<{paramTypeName}>()";
                                             }

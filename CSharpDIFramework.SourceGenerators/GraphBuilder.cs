@@ -109,8 +109,23 @@ internal class GraphBuilder
                 continue;
             }
 
-            if (paramTypeName == Constants.ResolverInterfaceName)
+            if (paramTypeName == Constants.ResolverInterfaceName || paramTypeName == Constants.ContainerInterfaceName)
             {
+                // Only allow IContainer for singletons, otherwise raise a diagnostic.
+                if (paramTypeName == Constants.ContainerInterfaceName && parentRegistration.Lifetime != ServiceLifetime.Singleton)
+                {
+                    _diagnostics.Add(
+                        DiagnosticInfo.Create(
+                            Diagnostics.LifestyleMismatch,
+                            parentRegistration.RegistrationLocation,
+                            parentRegistration.ImplementationType.FullName,
+                            parentRegistration.Lifetime.ToString(),
+                            paramTypeName,
+                            "Singleton"
+                        )
+                    );
+                }
+
                 continue;
             }
 

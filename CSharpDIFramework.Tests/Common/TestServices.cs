@@ -38,6 +38,28 @@ public class ServiceWithDependency(ISingletonService singleton) : IServiceWithDe
 
     #endregion
 }
+// =================================================================
+// 1a. Services for IContainer Injection Test
+// =================================================================
+
+public interface ISingletonWithContainerDep
+{
+    IContainer Container { get; }
+}
+
+public class SingletonWithContainerDep : ISingletonWithContainerDep
+{
+    public SingletonWithContainerDep(IContainer container)
+    {
+        Container = container;
+    }
+
+    #region ISingletonWithContainerDep Implementation
+
+    public IContainer Container { get; }
+
+    #endregion
+}
 
 // =================================================================
 // 2. Services for Constructor Selection Tests
