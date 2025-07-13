@@ -6,6 +6,7 @@ internal static class Constants
     public const string SingletonAttributeName = "CSharpDIFramework.SingletonAttribute";
     public const string TransientAttributeName = "CSharpDIFramework.TransientAttribute";
     public const string ScopedAttributeName = "CSharpDIFramework.ScopedAttribute";
+    public const string ScopedToAttributeName = "CSharpDIFramework.ScopedToAttribute";
     public const string InjectAttributeName = "CSharpDIFramework.InjectAttribute";
     public const string DecorateAttributeName = "CSharpDIFramework.DecorateAttribute";
     public const string RegisterModuleAttributeName = "CSharpDIFramework.RegisterModuleAttribute";
@@ -19,6 +20,7 @@ internal enum ServiceLifetime
 {
     Transient,
     Scoped,
+    ScopedToTag,
     Singleton
 }
 
@@ -62,6 +64,7 @@ internal record ServiceRegistration(
     public ServiceLifetime Lifetime { get; } = Lifetime;
     public LocationInfo? RegistrationLocation { get; } = RegistrationLocation;
     public bool IsDisposable { get; } = IsDisposable;
+    public string? ScopeTag { get; set; }
     public EquatableArray<DecoratorInfo> Decorators { get; set; } = EquatableArray<DecoratorInfo>.Empty;
 }
 

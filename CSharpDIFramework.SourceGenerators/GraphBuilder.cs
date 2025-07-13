@@ -1,6 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
-
 namespace CSharpDIFramework.SourceGenerators;
 
 internal class GraphBuilder
@@ -151,6 +148,24 @@ internal class GraphBuilder
                         effectiveParentLifetime.ToString(),
                         dependencyRegistration.ServiceTypeFullName,
                         dependencyRegistration.Lifetime.ToString()
+                    )
+                );
+                continue;
+            }
+
+            if (parentRegistration.Lifetime == ServiceLifetime.ScopedToTag &&
+                dependencyRegistration.Lifetime == ServiceLifetime.ScopedToTag &&
+                parentRegistration.ScopeTag != dependencyRegistration.ScopeTag)
+            {
+                // This is the unsafe sideways dependency! Report the new NDI0020 error.
+                _diagnostics.Add(
+                    DiagnosticInfo.Create(
+                        Diagnostics.MismatchedScopeTagDependency,
+                        parentRegistration.RegistrationLocation, // The error is on the service asking for the dependency
+                        parentRegistration.ImplementationType.FullName,
+                        parentRegistration.ScopeTag!,
+                        dependencyRegistration.ServiceTypeFullName,
+                        dependencyRegistration.ScopeTag!
                     )
                 );
                 continue;

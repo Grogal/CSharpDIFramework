@@ -1,5 +1,3 @@
-using System.Linq;
-
 using Microsoft.CodeAnalysis;
 
 namespace CSharpDIFramework.SourceGenerators;
@@ -38,8 +36,18 @@ internal sealed record DiagnosticInfo
 
     public Diagnostic CreateDiagnostic()
     {
-        return Diagnostic.Create(
-            Descriptor, Location?.ToLocation(), MessageArgs.GetArray()?.Cast<object>().ToArray()
-        );
+        string[]? messageArgs = MessageArgs.GetArray();
+        object[]? args = null;
+
+        if (messageArgs is not null)
+        {
+            args = new object[messageArgs.Length];
+            for (var i = 0; i < messageArgs.Length; i++)
+            {
+                args[i] = messageArgs[i];
+            }
+        }
+
+        return Diagnostic.Create(Descriptor, Location?.ToLocation(), args);
     }
 }

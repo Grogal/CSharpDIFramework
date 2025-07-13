@@ -560,6 +560,39 @@ public class SimpleFactory
     }
 }
 
+public interface ILocalContextService { }
+
+public class DisposableDependencyService : IServiceWithDependency, IDisposableService
+{
+    public DisposableDependencyService(ISingletonService singleton)
+    {
+        Singleton = singleton;
+    }
+
+    #region IDisposable Implementation
+
+    public void Dispose()
+    {
+        IsDisposed = true;
+    }
+
+    #endregion
+
+    #region IDisposableService Implementation
+
+    public bool IsDisposed { get; private set; }
+
+    #endregion
+
+    #region IServiceWithDependency Implementation
+
+    public ISingletonService Singleton { get; }
+
+    #endregion
+}
+
+public class LocalContextService(IServiceWithDependency sessionService) : ILocalContextService { }
+
 [RegisterModule]
 [Singleton(typeof(ILogger), typeof(StringBuilderLogger))]
 public interface ILoggingModule { }

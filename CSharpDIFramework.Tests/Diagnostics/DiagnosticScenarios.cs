@@ -8,7 +8,6 @@
 #if false
 namespace CSharpDIFramework.Tests.DiagnosticScenarios;
 
-
 #region NDI0001: Container must be partial
 
 // =================================================================
@@ -468,6 +467,54 @@ public class TransientWithContainer(IContainer container) : ITransientWithContai
 [RegisterContainer]
 [Transient(typeof(ITransientWithContainer), typeof(TransientWithContainer))]
 public partial class Container_TransientWithContainer { }
+
+#endregion
+
+#region NDI0019 & NDI0020: ScopedTo (Tagged Scope) Lifetime Errors
+
+// =================================================================
+
+// --- SCENARIO 1: Conflicting Lifetimes (ScopedTo + Singleton) ---
+public interface IConflictingLifetimeA { }
+
+public class ConflictingLifetimeA : IConflictingLifetimeA { }
+
+// EXPECT: NDI0019 (or similar) at the registration for IConflictingLifetimeA.
+// A service cannot be both a Singleton and scoped to a specific tag.
+[RegisterContainer]
+[Singleton(typeof(IConflictingLifetimeA), typeof(ConflictingLifetimeA))]
+[ScopedTo("MyTag", typeof(IConflictingLifetimeA), typeof(ConflictingLifetimeA))]
+public partial class Container_ScopedToWithSingleton { }
+
+// --- SCENARIO 2: Conflicting Lifetimes (ScopedTo + Scoped) ---
+public interface IConflictingLifetimeB { }
+
+public class ConflictingLifetimeB : IConflictingLifetimeB { }
+
+// EXPECT: NDI0019 (or similar) at the registration for IConflictingLifetimeB.
+// A service has an ambiguous lifetime, being both a normal Scoped service and a tagged Scoped service.
+[RegisterContainer]
+[Scoped(typeof(IConflictingLifetimeB), typeof(ConflictingLifetimeB))]
+[ScopedTo("MyTag", typeof(IConflictingLifetimeB), typeof(ConflictingLifetimeB))]
+public partial class Container_ScopedToWithScoped { }
+
+// --- SCENARIO 3: Sideway Captive Dependency (Mismatched Tags) ---
+public interface IServiceForTagA { }
+
+public class ServiceForTagA(IServiceForTagB dependency) : IServiceForTagA { }
+
+public interface IServiceForTagB { }
+
+public class ServiceForTagB : IServiceForTagB { }
+
+// EXPECT: NDI0020 (or a new diagnostic) at the registration for IServiceForTagA.
+// A service scoped to "TagA" cannot safely depend on a service scoped to "TagB".
+// The container cannot guarantee that the lifetime of "TagB" will outlive "TagA",
+// which could lead to using a disposed dependency.
+[RegisterContainer]
+[ScopedTo("TagA", typeof(IServiceForTagA), typeof(ServiceForTagA))]
+[ScopedTo("TagB", typeof(IServiceForTagB), typeof(ServiceForTagB))]
+public partial class Container_MismatchedTagDependency { }
 
 #endregion
 

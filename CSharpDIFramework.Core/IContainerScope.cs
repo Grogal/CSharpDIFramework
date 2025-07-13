@@ -4,7 +4,8 @@ namespace CSharpDIFramework;
 ///     Represents a limited scope from which services can be resolved.
 ///     Scoped and Transient services are disposed when the scope is disposed.
 /// </summary>
-public interface IContainerScope : IDisposable
+public interface IContainerScope : IResolver, IDisposable
 {
-    T Resolve<T>();
+    IContainerScope CreateScope();
+    IContainerScope CreateScope(string tag);
 }

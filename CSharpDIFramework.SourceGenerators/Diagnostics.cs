@@ -144,4 +144,27 @@ internal static class Diagnostics
         "The type '{0}' is not a valid module because it is not marked with the [RegisterModule] attribute",
         "CSharpDIFramework.Usage", DiagnosticSeverity.Error, true
     );
+
+    public static readonly DiagnosticDescriptor ScopedToOnNonScopedService = new(
+        "NDI0018",
+        "A user registers a service with both [ScopedTo] and [Singleton] or [Transient]",
+        "The [ScopedTo] lifetime is a form of Scoped lifetime and cannot be combined with '{0}'. Remove the conflicting attribute from service '{1}'.",
+        "CSharpDIFramework.Usage", DiagnosticSeverity.Error, true
+    );
+
+    public static readonly DiagnosticDescriptor DuplicateLifetimeDefinition = new(
+        "NDI0019",
+        "A user registers a service with multiple lifetime attributes (e.g., [Scoped] and [Transient])",
+        "Service '{0}' has multiple lifetime definitions ('{1}' and '{2}'). Please specify only one lifetime per registration.",
+        "CSharpDIFramework.Usage", DiagnosticSeverity.Error, true
+    );
+
+    public static readonly DiagnosticDescriptor MismatchedScopeTagDependency = new(
+        "NDI0020",
+        "Mismatched scope tag dependency",
+        "Service '{0}' (scoped to tag '{1}') cannot depend on service '{2}' (scoped to tag '{3}'). The container cannot guarantee that the dependency's lifetime will outlive the parent's.",
+        "CSharpDIFramework.Usage",
+        DiagnosticSeverity.Error,
+        true
+    );
 }

@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
 namespace CSharpDIFramework.SourceGenerators;
@@ -177,6 +175,11 @@ internal static class CodeGenerator
                         $"{doubleIndent}throw new global::System.InvalidOperationException($\"Service '{service.ServiceTypeFullName}' has a {service.Lifetime} lifetime and cannot be resolved from the root container. Please create and resolve from a scope.\");"
                     );
                     break;
+                case ServiceLifetime.ScopedToTag:
+                    sb.AppendLine(
+                        $"{new string(' ', (indentLevel + 2) * 4)}throw new global::System.InvalidOperationException($\"Service '{{typeof(TService).FullName}}' is scoped to tag '{service.SourceRegistration.ScopeTag}' and cannot be resolved from the root container. A scope with this tag must be created first.\");"
+                    );
+                    break;
             }
 
             sb.AppendLine($"{innerIndent}}}");
@@ -193,7 +196,13 @@ internal static class CodeGenerator
         var indent = new string(' ', indentLevel * 4);
         sb.AppendLine($"{indent}public global::CSharpDIFramework.IContainerScope CreateScope()");
         sb.AppendLine($"{indent}{{");
-        sb.AppendLine($"{indent}    return new Scope(this);");
+        sb.AppendLine($"{indent}    return new Scope(this, this, null);"); // Pass null for the tag
+        sb.AppendLine($"{indent}}}");
+        sb.AppendLine();
+
+        sb.AppendLine($"{indent}public global::CSharpDIFramework.IContainerScope CreateScope(string tag)");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{indent}    return new Scope(this, this, tag);");
         sb.AppendLine($"{indent}}}");
         sb.AppendLine();
     }
@@ -201,24 +210,61 @@ internal static class CodeGenerator
     private static void GenerateScopeClass(StringBuilder sb, ContainerBlueprint blueprint, int indentLevel)
     {
         var indent = new string(' ', indentLevel * 4);
-        var innerIndent = new string(' ', (indentLevel + 1) * 4);
-        var doubleIndent = new string(' ', (indentLevel + 2) * 4);
-        var tripleIndent = new string(' ', (indentLevel + 3) * 4);
 
-        sb.AppendLine($"{indent}private sealed partial class Scope : global::CSharpDIFramework.IContainerScope, global::CSharpDIFramework.IResolver");
+        sb.AppendLine($"{indent}private sealed partial class Scope : global::CSharpDIFramework.IContainerScope");
         sb.AppendLine($"{indent}{{");
-        sb.AppendLine($"{innerIndent}private readonly {blueprint.ContainerName} _root;");
-        sb.AppendLine($"{innerIndent}private readonly global::System.Collections.Generic.Dictionary<global::System.Type, object> _scopedInstances = new();");
-        sb.AppendLine($"{innerIndent}private readonly global::System.Collections.Generic.List<global::System.IDisposable> _disposables = new();");
-        sb.AppendLine($"{innerIndent}private bool _isDisposed;");
-        sb.AppendLine();
+        AddScopeFields(sb, blueprint, indentLevel + 1);
+        AddScopeConstructor(sb, blueprint, indentLevel + 1);
+        AddScopeResolveMethod(sb, blueprint, indentLevel + 1); // Use helper
+        AddScopeCreateScopeMethods(sb, indentLevel + 1); // Use helper
+        AddScopeDisposeMethod(sb, indentLevel + 1); // Use helper
+        sb.AppendLine($"{indent}}}");
+    }
 
-        sb.AppendLine($"{innerIndent}public Scope({blueprint.ContainerName} root) {{ _root = root; }}");
+    private static void AddScopeFields(StringBuilder sb, ContainerBlueprint blueprint, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 4);
+        sb.AppendLine($"{indent}private readonly {blueprint.ContainerName} _root;");
+        sb.AppendLine($"{indent}private readonly global::CSharpDIFramework.IResolver _parentResolver;");
+        sb.AppendLine($"{indent}private readonly string? _tag; // NEW");
+        sb.AppendLine($"{indent}private readonly global::System.Collections.Generic.Dictionary<global::System.Type, object> _scopedInstances = new();");
+        sb.AppendLine($"{indent}private readonly global::System.Collections.Generic.List<global::System.IDisposable> _disposables = new();");
+        sb.AppendLine($"{indent}private bool _isDisposed;");
         sb.AppendLine();
+    }
 
-        sb.AppendLine($"{innerIndent}public TService Resolve<TService>()");
-        sb.AppendLine($"{innerIndent}{{");
-        sb.AppendLine($"{doubleIndent}if (_isDisposed) throw new global::System.ObjectDisposedException(nameof(Scope));");
+    private static void AddScopeConstructor(StringBuilder sb, ContainerBlueprint blueprint, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 4);
+        sb.AppendLine($"{indent}public Scope({blueprint.ContainerName} root, global::CSharpDIFramework.IResolver parentResolver, string? tag)");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{indent}    _root = root;");
+        sb.AppendLine($"{indent}    _parentResolver = parentResolver;");
+        sb.AppendLine($"{indent}    _tag = tag;");
+        sb.AppendLine($"{indent}}}");
+        sb.AppendLine();
+    }
+
+    private static void AddScopeCreateScopeMethods(StringBuilder sb, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 4);
+        sb.AppendLine($"{indent}public global::CSharpDIFramework.IContainerScope CreateScope()");
+        sb.AppendLine($"{indent}{{ return new Scope(_root, this, null); }}");
+        sb.AppendLine();
+        sb.AppendLine($"{indent}public global::CSharpDIFramework.IContainerScope CreateScope(string tag)");
+        sb.AppendLine($"{indent}{{ return new Scope(_root, this, tag); }}");
+        sb.AppendLine();
+    }
+
+    private static void AddScopeResolveMethod(StringBuilder sb, ContainerBlueprint blueprint, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 4);
+        var innerIndent = new string(' ', (indentLevel + 1) * 4);
+        var tripleIndent = new string(' ', (indentLevel + 2) * 4);
+
+        sb.AppendLine($"{indent}public TService Resolve<TService>()");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{innerIndent}if (_isDisposed) throw new global::System.ObjectDisposedException(nameof(Scope));");
 
         var isFirst = true;
         foreach (ResolvedService? service in blueprint.Services)
@@ -226,53 +272,86 @@ internal static class CodeGenerator
             string ifPrefix = isFirst ? "if" : "else if";
             isFirst = false;
 
-            string serviceType = service.ServiceTypeFullName;
-            sb.AppendLine($"{doubleIndent}{ifPrefix} (typeof(TService) == typeof({serviceType}))");
-            sb.AppendLine($"{doubleIndent}{{");
+            sb.AppendLine($"{innerIndent}{ifPrefix} (typeof(TService) == typeof({service.ServiceTypeFullName}))");
+            sb.AppendLine($"{innerIndent}{{");
 
             switch (service.Lifetime)
             {
                 case ServiceLifetime.Singleton:
                     sb.AppendLine($"{tripleIndent}return _root.Resolve<TService>();");
                     break;
-                case ServiceLifetime.Scoped:
-                    sb.AppendLine(
-                        $"{tripleIndent}if (_scopedInstances.TryGetValue(typeof(TService), out var scopedInstance)) return (TService)scopedInstance;"
-                    );
-                    sb.AppendLine($"{tripleIndent}var newScopedInstance = {GenerateInstanceCreation(service, "this")};");
-                    sb.AppendLine($"{tripleIndent}_scopedInstances.Add(typeof(TService), newScopedInstance);");
-                    sb.AppendLine($"{tripleIndent}return (TService)(object)newScopedInstance;");
+
+                case ServiceLifetime.ScopedToTag:
+                    GenerateScopedToTagLogic(sb, service, indentLevel + 2);
                     break;
+
+                case ServiceLifetime.Scoped:
+                    GenerateScopedLogic(sb, service, indentLevel + 2);
+                    break;
+
                 case ServiceLifetime.Transient:
-                    sb.AppendLine($"{tripleIndent}var transientInstance = {GenerateInstanceCreation(service, "this")};");
-                    sb.AppendLine(
-                        $"{tripleIndent}if (transientInstance is global::System.IDisposable disposableTransient) {{ _disposables.Add(disposableTransient); }}"
-                    );
-                    sb.AppendLine($"{tripleIndent}return (TService)(object)transientInstance;");
+                    GenerateTransientLogic(sb, service, indentLevel + 2);
                     break;
             }
 
-            sb.AppendLine($"{doubleIndent}}}");
+            sb.AppendLine($"{innerIndent}}}");
         }
 
+        // Fallback for services not found (e.g., from a misconfigured module)
         sb.AppendLine(
-            $"{doubleIndent}throw new global::System.InvalidOperationException($\"Service of type {{typeof(TService).FullName}} is not registered.\");"
+            $"{innerIndent}throw new global::System.InvalidOperationException($\"Service of type {{typeof(TService).FullName}} is not registered.\");"
         );
-        sb.AppendLine($"{innerIndent}}}");
+        sb.AppendLine($"{indent}}}");
         sb.AppendLine();
+    }
 
-        // Scope Dispose()
-        sb.AppendLine($"{innerIndent}public void Dispose()");
-        sb.AppendLine($"{innerIndent}{{");
-        sb.AppendLine($"{doubleIndent}if (_isDisposed) return;");
-        sb.AppendLine($"{doubleIndent}_isDisposed = true;");
-        sb.AppendLine($"{doubleIndent}foreach (var disposable in _disposables) {{ disposable.Dispose(); }}");
-        sb.AppendLine($"{doubleIndent}foreach (var scopedInstance in _scopedInstances.Values)");
-        sb.AppendLine($"{doubleIndent}{{");
-        sb.AppendLine($"{doubleIndent}    if (scopedInstance is global::System.IDisposable disposableScoped) {{ disposableScoped.Dispose(); }}");
-        sb.AppendLine($"{doubleIndent}}}");
-        sb.AppendLine($"{innerIndent}}}");
+    private static void GenerateScopedLogic(StringBuilder sb, ResolvedService service, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 4);
+        sb.AppendLine($"{indent}if (_scopedInstances.TryGetValue(typeof(TService), out var inst)) return (TService)inst;");
+        sb.AppendLine($"{indent}var newInst = {GenerateInstanceCreation(service, "this")};");
+        sb.AppendLine($"{indent}_scopedInstances.Add(typeof(TService), newInst);");
+        sb.AppendLine($"{indent}return (TService)(object)newInst;");
+    }
 
+    private static void GenerateTransientLogic(StringBuilder sb, ResolvedService service, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 4);
+        sb.AppendLine($"{indent}var transientInstance = {GenerateInstanceCreation(service, "this")};");
+        sb.AppendLine($"{indent}if (transientInstance is global::System.IDisposable d) {{ _disposables.Add(d); }}");
+        sb.AppendLine($"{indent}return (TService)(object)transientInstance;");
+    }
+
+    private static void GenerateScopedToTagLogic(StringBuilder sb, ResolvedService service, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 4);
+        var innerIndent = new string(' ', (indentLevel + 1) * 4);
+
+        sb.AppendLine($"{indent}if (this._tag == \"{service.SourceRegistration.ScopeTag}\")");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{innerIndent}if (_scopedInstances.TryGetValue(typeof(TService), out var inst)) return (TService)inst;");
+        sb.AppendLine($"{innerIndent}var newInst = {GenerateInstanceCreation(service, "this")};");
+        sb.AppendLine($"{innerIndent}_scopedInstances.Add(typeof(TService), newInst);");
+        sb.AppendLine($"{innerIndent}return (TService)(object)newInst;");
+        sb.AppendLine($"{indent}}}");
+        sb.AppendLine($"{indent}else");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{innerIndent}return _parentResolver.Resolve<TService>();");
+        sb.AppendLine($"{indent}}}");
+    }
+
+    private static void AddScopeDisposeMethod(StringBuilder sb, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 4);
+        var innerIndent = new string(' ', (indentLevel + 1) * 4);
+
+        sb.AppendLine($"{indent}public void Dispose()");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{innerIndent}if (_isDisposed) return;");
+        sb.AppendLine($"{innerIndent}_isDisposed = true;");
+        // Dispose transients first, then scoped instances
+        sb.AppendLine($"{innerIndent}foreach (var disposable in _disposables) {{ disposable.Dispose(); }}");
+        sb.AppendLine($"{innerIndent}foreach (var instance in _scopedInstances.Values) {{ (instance as global::System.IDisposable)?.Dispose(); }}");
         sb.AppendLine($"{indent}}}");
     }
 
@@ -372,16 +451,19 @@ internal static class CodeGenerator
                                                     // This parameter is the IResolver interface.
                                                     return resolverContext;
                                                 }
+
                                                 if (paramTypeName == Constants.ContainerInterfaceName)
                                                 {
                                                     // Only the root container can provide IContainer. resolverContext must be the root.
                                                     return "this";
                                                 }
+
                                                 if (decoratedServiceType != null && paramTypeName == decoratedServiceType)
                                                 {
                                                     // This parameter is for the service being decorated.
                                                     return decoratedServiceInstance!;
                                                 }
+
                                                 // Otherwise, it's a standard service that needs to be resolved.
                                                 return $"{resolverContext}.Resolve<{paramTypeName}>()";
                                             }

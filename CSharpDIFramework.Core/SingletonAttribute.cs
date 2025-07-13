@@ -57,6 +57,39 @@ public class ScopedAttribute(Type serviceType, Type implementationType) : Attrib
 }
 
 /// <summary>
+///     Registers a service with a lifetime scoped to the nearest parent scope
+///     that has a matching tag. The service will be a singleton within that scope.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, Inherited = false, AllowMultiple = true)]
+public class ScopedToAttribute : Attribute
+{
+    /// <summary>
+    ///     Registers a service with a specific implementation, scoped to a tagged scope.
+    /// </summary>
+    /// <param name="tag">The scope tag.</param>
+    /// <param name="serviceType">The service interface type.</param>
+    /// <param name="implementationType">The service implementation type.</param>
+    public ScopedToAttribute(string tag, Type serviceType, Type implementationType)
+    {
+        Tag = tag;
+        ServiceType = serviceType;
+        ImplementationType = implementationType;
+    }
+
+    /// <summary>
+    ///     Registers a concrete type that serves as its own implementation, scoped to a tagged scope.
+    /// </summary>
+    /// <param name="tag">The scope tag.</param>
+    /// <param name="concreteType">The concrete service type.</param>
+    public ScopedToAttribute(string tag, Type concreteType)
+        : this(tag, concreteType, concreteType) { }
+
+    public string Tag { get; }
+    public Type ServiceType { get; }
+    public Type ImplementationType { get; }
+}
+
+/// <summary>
 ///     Registers a decorator for a service in the DI container.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, Inherited = false, AllowMultiple = true)]

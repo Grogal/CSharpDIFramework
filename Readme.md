@@ -1,23 +1,20 @@
 **A compile-time Dependency Injection framework for .NET using C# Source Generators.**
 
-This framework helps you manage dependencies in your application by generating the necessary container code at compile
-time. This catches common configuration errors before you run your code and ensures your dependency injection setup is
-fast and reliable.
-
 ## Features
 
 - **Compile-Time Safety:** The source generator validates your container configuration during the build process,
   providing clear diagnostics for common errors.
 - **No Runtime Reflection:** Eliminates reflection-based resolution, making the container's behavior predictable and
   easy to debug.
-- **Full Lifetime Support:**
+- **Advanced Lifetime Support:**
     - **Singleton:** One instance for the lifetime of the container.
     - **Scoped:** One instance per scope (`IContainerScope`).
+    - **ScopedTo(tag):** A powerful lifetime scoped to a specific, named parent scope, enabling complex lifecycle
+      patterns.
     - **Transient:** A new instance every time it's resolved.
 - **Decorator Support:** Easily apply decorators to your services in a clean, declarative way.
 - **Modular Configuration:** Organize your service registrations into modules and import them into your main container.
-- **Automatic `IDisposable` Handling:** Scoped and Transient services are disposed when their scope ends. Singleton
-  services are disposed when the root container is disposed.
+- **Automatic `IDisposable` Handling:** `IDisposable` services are automatically disposed when their owning scope ends.
 
 ## Getting Started
 
@@ -98,50 +95,87 @@ The generator automatically selects a constructor for your implementation types 
 1. A single constructor marked with `[Inject]`.
 2. If no `[Inject]` attribute is found, the single "greediest" public constructor (the one with the most parameters).
 
-```csharp
-public class ServiceWithDependencies
-{
-    // This constructor will be chosen because it has more parameters.
-    public ServiceWithDependencies(ILogger logger, IMyService service) { }
+### Injectable Framework Services
 
-    public ServiceWithDependencies(ILogger logger) { }
+You can inject two special framework interfaces into your services' constructors:
+
+- **`IResolver`**: Provides access to `Resolve<T>()`. Can be injected into any service. When resolved from a scope, it
+  represents that scope.
+- **`IContainer`**: Provides access to `Resolve<T>()`, `Dispose()`, and `CreateScope()`. **Can only be injected
+  into `Singleton` services.**
+
+```csharp
+public class MyFactory
+{
+    private readonly IResolver _resolver;
+    public MyFactory(IResolver resolver) // Legal for any lifetime
+    {
+        _resolver = resolver;
+    }
 }
 
-public class ServiceWithAttribute
+public class AppOrchestrator
 {
-    public ServiceWithAttribute(ILogger logger, IMyService service) { }
+    private readonly IContainer _container;
+    public AppOrchestrator(IContainer container) // Only legal for Singletons
+    {
+        _container = container;
+    }
+}
+```
 
-    // This constructor will be chosen because of the [Inject] attribute.
-    [Inject]
-    public ServiceWithAttribute(ILogger logger) { }
+### Nested and Tagged Scopes
+
+For complex lifecycles (e.g., a "Player Session" in a game), you can create nested scopes. To create a service that is
+shared across a specific set of scopes, use the **`[ScopedTo(tag)]`** attribute.
+
+```csharp
+public enum ScopeTags { PlayerSession }
+
+public class FactionManager { /* ... */ } // A long-lived session service
+public class HubController(FactionManager fm) { /* ... */ } // A short-lived context service
+
+[RegisterContainer]
+[ScopedTo(ScopeTags.PlayerSession, typeof(FactionManager))]
+[Scoped(typeof(HubController))]
+public partial class GameContainer { }
+
+// --- Usage ---
+var container = new GameContainer();
+
+// 1. Create the outer scope with a tag.
+using (var sessionScope = container.CreateScope(nameof(ScopeTags.PlayerSession)))
+{
+    // 2. Create a nested scope for a specific context.
+    using (var hubScope = sessionScope.CreateScope())
+    {
+        // When HubController is resolved, the framework automatically finds the
+        // FactionManager instance from the parent "PlayerSession" scope.
+        var controller = hubScope.Resolve<HubController>();
+    }
 }
 ```
 
 ### Decorators
 
-Use the `[Decorate]` attribute to wrap a registered service with another implementation. Decorators are applied in the
-order they are registered.
+Use the `[Decorate]` attribute to wrap a registered service. Decorators are applied in order, with module decorators
+applied before container decorators, creating an intuitive "inside-out" wrapping structure.
 
 ```csharp
-// 1. Service
-public interface IGreetingService { string Greet(); }
-public class GreetingService : IGreetingService { public string Greet() => "Hello"; }
+// --- Module Definition ---
+[RegisterModule]
+[Decorate(typeof(IOrderedService), typeof(DecoratorA))]
+public interface IMyModule { }
 
-// 2. Decorator
-public class ExclamationDecorator(IGreetingService inner) : IGreetingService
-{
-    public string Greet() => $"{inner.Greet()}!";
-}
-
-// 3. Container Registration
+// --- Container Registration ---
 [RegisterContainer]
-[Singleton(typeof(IGreetingService), typeof(GreetingService))]
-[Decorate(typeof(IGreetingService), typeof(ExclamationDecorator))] // Applied after registration
-public partial class DecoratorContainer { }
+[ImportModule(typeof(IMyModule))]
+[Singleton(typeof(IOrderedService), typeof(BaseOrderedService))]
+[Decorate(typeof(IOrderedService), typeof(DecoratorB))] // Applied last
+public partial class DecoratorOrderContainer { }
 
-// Usage:
-var service = new DecoratorContainer().Resolve<IGreetingService>();
-Console.WriteLine(service.Greet()); // Output: Hello!
+// Resulting object: new DecoratorB(new DecoratorA(new BaseOrderedService()))
+// Execution order: "Base-A-B"
 ```
 
 ### Modules
@@ -158,7 +192,6 @@ public interface IConfigModule { }
 // --- Container Importing the Module ---
 [RegisterContainer]
 [ImportModule(typeof(IConfigModule))] // Import services from IConfigModule
-[Singleton(typeof(ILogger), typeof(ConsoleLogger))]
 public partial class ModularContainer { }
 ```
 
@@ -166,22 +199,25 @@ public partial class ModularContainer { }
 
 The source generator catches configuration errors at compile time, providing specific diagnostics to help you fix them.
 
-| Code      | Description                              | Example Cause                                                                                       |
-|:----------|:-----------------------------------------|:----------------------------------------------------------------------------------------------------|
-| `NDI0001` | **Container must be partial**            | The container class is missing the `partial` keyword.                                               |
-| `NDI0002` | **Incorrect attribute**                  | A registration attribute like `[Singleton]` has an invalid combination of constructor arguments.    |
-| `NDI0003` | **No suitable public constructor**       | An implementation type has no public constructors.                                                  |
-| `NDI0004` | **Cyclic dependency detected**           | `ServiceA` depends on `ServiceB`, and `ServiceB` depends on `ServiceA`.                             |
-| `NDI0005` | **Service not registered**               | `ServiceA` depends on `IDependency`, but `IDependency` was never registered.                        |
-| `NDI0006` | **Implementation not assignable**        | `[Singleton(typeof(IService), typeof(WrongImpl))]` where `WrongImpl` doesn't implement `IService`.  |
-| `NDI0007` | **Cannot instantiate abstract type**     | An implementation type is an interface or an abstract class.                                        |
-| `NDI0008` | **Ambiguous constructors**               | An implementation has multiple constructors with the same (greediest) number of parameters.         |
-| `NDI0009` | **Multiple [Inject] constructors**       | An implementation has more than one constructor marked with `[Inject]`.                             |
-| `NDI0010` | **Duplicate services registration**      | A service type (e.g., `ILogger`) is registered more than once in the container.                     |
-| `NDI0011` | **Invalid lifestyle mismatch**           | A `Singleton` service tries to inject a `Scoped` service (a captive dependency).                    |
-| `NDI0012` | **Decorator for unregistered service**   | `[Decorate]` is used for a service that has not been registered.                                    |
-| `NDI0013` | **Ambiguous decorator constructors**     | A decorator has multiple candidate constructors, and the generator cannot choose one.               |
-| `NDI0014` | **Decorator missing required parameter** | A decorator's constructor does not have a parameter for the service it is decorating.               |
-| `NDI0015` | **Decorator has captive dependency**     | A decorator inherits a long lifetime (e.g., Singleton) and depends on a service with a shorter one. |
-| `NDI0016` | **Duplicate decorator registration**     | The same decorator type is applied to the same service more than once.                              |
-| `NDI0017` | **Imported type is not a module**        | A type passed to `[ImportModule]` is not an interface marked with `[RegisterModule]`.               |
+| Code          | Description                              | Example Cause                                                                                                                                      |
+|:--------------|:-----------------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------|
+| **`NDI0001`** | **Container must be partial**            | The container class is missing the `partial` keyword.                                                                                              |
+| **`NDI0002`** | **Incorrect attribute usage**            | A registration attribute like `[Singleton]` has an invalid number or type of constructor arguments.                                                |
+| **`NDI0003`** | **No suitable public constructor**       | An implementation type has no public constructors for the container to use.                                                                        |
+| **`NDI0004`** | **Cyclic dependency detected**           | `ServiceA` depends on `ServiceB`, and `ServiceB` depends back on `ServiceA`.                                                                       |
+| **`NDI0005`** | **Service not registered**               | `ServiceA` depends on `IDependency`, but `IDependency` was never registered in the container.                                                      |
+| **`NDI0006`** | **Implementation not assignable**        | `[Singleton(typeof(IService), typeof(WrongImpl))]` where `WrongImpl` doesn't implement `IService`.                                                 |
+| **`NDI0007`** | **Cannot instantiate abstract type**     | An implementation type is an interface or an `abstract class`.                                                                                     |
+| **`NDI0008`** | **Ambiguous constructors**               | An implementation has multiple "greediest" constructors (with the same number of parameters) and no `[Inject]` attribute to resolve the ambiguity. |
+| **`NDI0009`** | **Multiple [Inject] constructors**       | An implementation has more than one constructor marked with the `[Inject]` attribute.                                                              |
+| **`NDI0010`** | **Duplicate service registration**       | The same service type is registered in two different imported modules.                                                                             |
+| **`NDI0011`** | **Invalid lifestyle mismatch**           | A long-lived service depends on a shorter-lived one (e.g., a `Singleton` injects a `Scoped` service), creating a "captive dependency".             |
+| **`NDI0012`** | **Decorator for unregistered service**   | `[Decorate]` is used for a service type that has not been registered with a lifetime attribute.                                                    |
+| **`NDI0013`** | **Ambiguous decorator constructors**     | A decorator has multiple candidate constructors, and the generator cannot determine which one to use.                                              |
+| **`NDI0014`** | **Decorator missing required parameter** | A decorator's constructor does not include a parameter of the service type it is decorating.                                                       |
+| **`NDI0015`** | **Decorator has captive dependency**     | A decorator (which inherits its service's lifetime) depends on a service with a shorter lifetime.                                                  |
+| **`NDI0016`** | **Duplicate decorator registration**     | The same decorator type is applied to the same service more than once.                                                                             |
+| **`NDI0017`** | **Imported type is not a module**        | A type passed to `[ImportModule]` is not an `interface` marked with `[RegisterModule]`.                                                            |
+| **`NDI0018`** | **Conflicting `[ScopedTo]` lifetime**    | A service has `[ScopedTo]` combined with `[Singleton]` or `[Transient]`.                                                                           |
+| **`NDI0019`** | **Duplicate lifetime definition**        | A service has multiple lifetime attributes applied (e.g., `[Scoped]` and `[Transient]`).                                                           |
+| **`NDI0020`** | **Mismatched scope tag dependency**      | A service `ScopedTo("A")` depends on a service `ScopedTo("B")`, which is unsafe as the lifetimes are not guaranteed to align.                      |
